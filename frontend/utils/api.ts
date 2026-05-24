@@ -6,6 +6,7 @@ import type {
   TodoUpdate,
   Notification,
   TagInfo,
+  StreakStats,
   SummaryResponse,
   Folder,
   FolderCreate,
@@ -116,6 +117,10 @@ export const todosApi = {
 
   stats() {
     return apiFetch<TodoStats>('/todos/stats')
+  },
+
+  streak() {
+    return apiFetch<StreakStats>('/todos/streak')
   },
 
   tags() {

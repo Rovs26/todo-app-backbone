@@ -1,5 +1,5 @@
 <template>
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
     <!-- Total -->
     <div
       class="bg-white dark:bg-secondary-800 rounded-lg p-4 border border-secondary-200 dark:border-secondary-700 transition-colors duration-200"
@@ -51,6 +51,26 @@
       </div>
     </div>
 
+    <!-- Streak -->
+    <div
+      class="bg-white dark:bg-secondary-800 rounded-lg p-4 border border-secondary-200 dark:border-secondary-700 transition-colors duration-200"
+    >
+      <div class="flex items-center gap-3">
+        <div class="flex-shrink-0 w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-xl" aria-hidden="true">
+          🔥
+        </div>
+        <div>
+          <p class="text-xs font-medium text-secondary-500 dark:text-secondary-400 uppercase tracking-wide">Streak</p>
+          <p class="text-2xl font-bold text-orange-600 dark:text-orange-400">
+            {{ streak?.current_streak_days ?? 0 }}<span class="text-sm font-normal text-secondary-500 dark:text-secondary-400"> day{{ (streak?.current_streak_days ?? 0) === 1 ? '' : 's' }}</span>
+          </p>
+          <p class="text-[11px] text-secondary-500 dark:text-secondary-400">
+            Best: {{ streak?.longest_streak_days ?? 0 }}
+          </p>
+        </div>
+      </div>
+    </div>
+
     <!-- Overdue -->
     <div
       class="bg-white dark:bg-secondary-800 rounded-lg p-4 border border-secondary-200 dark:border-secondary-700 transition-colors duration-200"
@@ -71,10 +91,11 @@
 </template>
 
 <script setup lang="ts">
-import type { TodoStats } from '~/types'
+import type { StreakStats, TodoStats } from '~/types'
 
 interface Props {
   stats: TodoStats | null
+  streak?: StreakStats | null
 }
 
 defineProps<Props>()

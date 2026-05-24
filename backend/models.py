@@ -222,6 +222,16 @@ class TodoStats(BaseModel):
     overdue: int
 
 
+class StreakStats(BaseModel):
+    """Completion-streak statistics for the dashboard."""
+
+    today_completed: int
+    week_completed: int
+    current_streak_days: int
+    longest_streak_days: int
+    last_completion_date: str | None = None
+
+
 # --- Folder Models ---
 
 

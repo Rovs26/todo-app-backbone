@@ -86,7 +86,7 @@
         <div class="lg:col-span-9 space-y-6">
           <section aria-label="Todo statistics">
             <LoadingSkeleton v-if="loading && !stats" variant="stats" aria-label="Loading statistics" />
-            <StatsCards v-else :stats="stats" />
+            <StatsCards v-else :stats="stats" :streak="streak" />
           </section>
 
           <!-- View switcher + filters -->
@@ -428,6 +428,7 @@ import { useAuth } from '~/composables/useAuth'
 import { useToast } from '~/composables/useToast'
 import { useFolders } from '~/composables/useFolders'
 import { useNotifications } from '~/composables/useNotifications'
+import { useStreak } from '~/composables/useStreak'
 import { todosApi, aiApi } from '~/utils/api'
 import type { Folder, TagInfo, Todo, TodoCreate, TodoUpdate } from '~/types'
 
@@ -459,6 +460,7 @@ const {
   remove: removeFolderFn,
 } = useFolders()
 const { requestDesktopPermission } = useNotifications()
+const { streak, refresh: refreshStreak, invalidate: invalidateStreak } = useStreak()
 
 const calendarUrl = todosApi.calendarUrl()
 
@@ -539,6 +541,7 @@ async function handleBulkAction(action: string, payload?: Record<string, unknown
     if (s.validation_error) parts.push(`${s.validation_error} invalid`)
     toastSuccess(parts.length ? parts.join(', ') : 'Done')
     await Promise.all([fetchTodos(), fetchStats(), refreshTags()])
+    if (action === 'mark_done' || action === 'delete') invalidateStreak()
     clearSelection()
   } catch (err: any) {
     toastError(err?.data?.detail || err?.message || 'Bulk action failed')
@@ -567,7 +570,7 @@ const folderAllTotal = computed(() =>
 )
 
 onMounted(async () => {
-  await Promise.all([fetchTodos(), fetchStats(), fetchFolders(), refreshTags()])
+  await Promise.all([fetchTodos(), fetchStats(), fetchFolders(), refreshTags(), refreshStreak()])
   try {
     const status = await aiApi.status()
     aiEnabled.value = !!status?.enabled
@@ -688,6 +691,7 @@ async function handleFormSubmit(payload: any) {
 
   closeForm()
   await Promise.all([fetchStats(), fetchFolderStats(), refreshTags()])
+  invalidateStreak()
   summaryRefresh.value++
 }
 
@@ -703,6 +707,7 @@ async function toggleTodoStatus(todo: Todo) {
     toastSuccess(newStatus === 'done' ? 'Todo completed' : 'Todo reopened')
     await Promise.all([fetchStats(), fetchFolderStats()])
     summaryRefresh.value++
+    if (newStatus === 'done') invalidateStreak()
   } else {
     toastError(todosError.value || 'Failed to update todo')
   }

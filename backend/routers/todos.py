@@ -16,8 +16,9 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from dependencies import get_current_user
-from models import Todo, TodoCreate, TodoStats, TodoUpdate, User
+from models import StreakStats, Todo, TodoCreate, TodoStats, TodoUpdate, User
 from services import ai_service
+from services.streak_service import compute_streak
 from services.todo_service import TodoService
 from store import JSONStore
 
@@ -68,6 +69,15 @@ class BulkActionRequest(BaseModel):
 async def get_stats(current_user: User = Depends(get_current_user)) -> TodoStats:
     """Get dashboard statistics for the authenticated user."""
     return todo_service.get_stats(current_user.id)
+
+
+@router.get("/streak", response_model=StreakStats)
+async def get_streak(current_user: User = Depends(get_current_user)) -> StreakStats:
+    """Return completion-streak stats for the authenticated user."""
+    records = [
+        r for r in todo_service.todo_store.read_all() if r.get("user_id") == current_user.id
+    ]
+    return StreakStats(**compute_streak(records))
 
 
 @router.get("/tags/list", response_model=list[TagInfo])

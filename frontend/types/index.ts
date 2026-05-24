@@ -64,6 +64,14 @@ export interface TodoStats {
   overdue: number
 }
 
+export interface StreakStats {
+  today_completed: number
+  week_completed: number
+  current_streak_days: number
+  longest_streak_days: number
+  last_completion_date: string | null
+}
+
 export type TodoCreate = Pick<Todo, 'title'> &
   Partial<Pick<Todo, 'description' | 'priority' | 'due_date' | 'reminder_at' | 'status' | 'folder_id' | 'tags' | 'subtasks' | 'recurrence' | 'recurrence_until' | 'recurrence_count'>>
 
