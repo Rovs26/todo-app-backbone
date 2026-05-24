@@ -535,6 +535,167 @@ class TodoService:
         )
         return Todo(**updated)
 
+    def bulk_action(
+        self,
+        user_id: str,
+        ids: list[str],
+        action: str,
+        payload: dict | None,
+        folder_store: JSONStore | None = None,
+    ) -> dict:
+        """Apply ``action`` across many todo ids in a single atomic write.
+
+        Returns ``{ outcomes, summary }``. Per-id statuses are one of
+        ``succeeded``, ``not_found``, ``no_change``, ``validation_error``.
+        """
+        valid_actions = {
+            "mark_done", "mark_pending", "mark_in_progress", "delete",
+            "move_to_folder", "add_tag", "remove_tag", "set_priority",
+        }
+        if action not in valid_actions:
+            raise ValidationError(
+                [{"field": "action", "message": f"Invalid action: {action}"}]
+            )
+
+        payload = payload or {}
+        # Pre-validate payload
+        target_folder_id: str | None = None
+        if action == "move_to_folder":
+            raw = payload.get("folder_id")
+            if raw in (None, ""):
+                target_folder_id = None
+            else:
+                target_folder_id = str(raw)
+                if folder_store is not None:
+                    f = folder_store.find_by_id(target_folder_id)
+                    if not f or f.get("user_id") != user_id:
+                        raise ValidationError(
+                            [{"field": "folder_id", "message": "Folder not found"}]
+                        )
+        target_tag: str | None = None
+        if action in ("add_tag", "remove_tag"):
+            raw = payload.get("tag")
+            if not isinstance(raw, str):
+                raise ValidationError(
+                    [{"field": "tag", "message": "tag must be a string"}]
+                )
+            target_tag = raw.strip().lower()
+            if not target_tag:
+                raise ValidationError(
+                    [{"field": "tag", "message": "tag must not be empty"}]
+                )
+        target_priority: str | None = None
+        if action == "set_priority":
+            raw = payload.get("priority")
+            if raw not in {p.value for p in Priority}:
+                raise ValidationError(
+                    [{"field": "priority", "message": "priority must be low|medium|high"}]
+                )
+            target_priority = raw
+
+        # Dedup ids preserving order
+        seen: set[str] = set()
+        unique_ids: list[str] = []
+        for raw_id in ids:
+            if not isinstance(raw_id, str):
+                continue
+            if raw_id in seen:
+                continue
+            seen.add(raw_id)
+            unique_ids.append(raw_id)
+
+        records = self.todo_store.read_all()
+        by_id = {r.get("id"): r for r in records}
+
+        outcomes: dict[str, dict] = {}
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Track delete + spawn-next per series to enforce "once per series"
+        delete_ids: set[str] = set()
+        spawn_per_series: dict[str, dict] = {}  # series_id -> source row (highest index)
+
+        for tid in unique_ids:
+            row = by_id.get(tid)
+            if not row or row.get("user_id") != user_id:
+                outcomes[tid] = {"status": "not_found"}
+                continue
+            if action == "delete":
+                delete_ids.add(tid)
+                outcomes[tid] = {"status": "succeeded"}
+                continue
+            changed = False
+            if action == "mark_done":
+                if row.get("status") != Status.DONE.value:
+                    was_done = False
+                    row["status"] = Status.DONE.value
+                    row["updated_at"] = now
+                    changed = True
+                    # candidate for series spawn
+                    sid = row.get("recurrence_series_id")
+                    rec = row.get("recurrence", Recurrence.NONE.value)
+                    if sid and rec != Recurrence.NONE.value and not was_done:
+                        cur = spawn_per_series.get(sid)
+                        if cur is None or row.get("recurrence_index", 0) > cur.get("recurrence_index", 0):
+                            spawn_per_series[sid] = row
+            elif action == "mark_pending":
+                if row.get("status") != Status.PENDING.value:
+                    row["status"] = Status.PENDING.value
+                    row["updated_at"] = now
+                    changed = True
+            elif action == "mark_in_progress":
+                if row.get("status") != Status.IN_PROGRESS.value:
+                    row["status"] = Status.IN_PROGRESS.value
+                    row["updated_at"] = now
+                    changed = True
+            elif action == "move_to_folder":
+                if (row.get("folder_id") or None) != target_folder_id:
+                    row["folder_id"] = target_folder_id
+                    row["updated_at"] = now
+                    changed = True
+            elif action == "add_tag":
+                tags = list(row.get("tags") or [])
+                if target_tag in tags:
+                    pass
+                else:
+                    tags.append(target_tag)
+                    row["tags"] = tags
+                    row["updated_at"] = now
+                    changed = True
+            elif action == "remove_tag":
+                tags = list(row.get("tags") or [])
+                if target_tag in tags:
+                    row["tags"] = [t for t in tags if t != target_tag]
+                    row["updated_at"] = now
+                    changed = True
+            elif action == "set_priority":
+                if row.get("priority") != target_priority:
+                    row["priority"] = target_priority
+                    row["updated_at"] = now
+                    changed = True
+            outcomes[tid] = {"status": "succeeded" if changed else "no_change"}
+
+        # apply deletes
+        if delete_ids:
+            records = [r for r in records if r.get("id") not in delete_ids]
+
+        # spawn next for done recurring (once per series)
+        for source in spawn_per_series.values():
+            nxt = self._build_next_occurrence(source)
+            if nxt:
+                records.append(nxt)
+
+        self.todo_store.write_all(records)
+
+        summary = {
+            "total": len(unique_ids),
+            "succeeded": sum(1 for o in outcomes.values() if o["status"] == "succeeded"),
+            "not_found": sum(1 for o in outcomes.values() if o["status"] == "not_found"),
+            "forbidden": 0,
+            "validation_error": sum(1 for o in outcomes.values() if o["status"] == "validation_error"),
+            "no_change": sum(1 for o in outcomes.values() if o["status"] == "no_change"),
+        }
+        return {"outcomes": outcomes, "summary": summary}
+
     def list_tags(self, user_id: str) -> list[dict]:
         """Return distinct tags used by the user with usage counts."""
         records = [r for r in self.todo_store.read_all() if r.get("user_id") == user_id]

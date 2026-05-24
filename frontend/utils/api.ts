@@ -100,6 +100,20 @@ export const todosApi = {
     return apiFetch<void>(`/todos/${id}`, { method: 'DELETE', params: { apply_to: applyTo } })
   },
 
+  bulk(ids: string[], action: string, payload?: Record<string, unknown>) {
+    return apiFetch<{
+      outcomes: Record<string, { status: string }>
+      summary: {
+        total: number
+        succeeded: number
+        not_found: number
+        forbidden: number
+        validation_error: number
+        no_change: number
+      }
+    }>('/todos/bulk', { method: 'POST', body: { ids, action, payload: payload ?? null } })
+  },
+
   stats() {
     return apiFetch<TodoStats>('/todos/stats')
   },

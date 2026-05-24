@@ -108,6 +108,24 @@
               </div>
 
               <div v-if="view === 'list'" class="flex flex-wrap items-center gap-2 ml-auto">
+                <button
+                  type="button"
+                  class="text-xs px-3 py-1.5 rounded-md border transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  :class="selectMode
+                    ? 'bg-primary-600 border-primary-600 text-white hover:bg-primary-700'
+                    : 'bg-white dark:bg-secondary-800 border-secondary-300 dark:border-secondary-600 text-secondary-700 dark:text-secondary-200 hover:bg-secondary-50 dark:hover:bg-secondary-700'"
+                  @click="toggleSelectMode"
+                >
+                  {{ selectMode ? 'Done' : 'Select' }}
+                </button>
+                <button
+                  v-if="selectMode"
+                  type="button"
+                  class="text-xs px-2 py-1.5 rounded-md text-secondary-600 dark:text-secondary-300 hover:text-secondary-900 dark:hover:text-white"
+                  @click="selectAllVisible"
+                >
+                  {{ allVisibleSelected ? 'Unselect all' : 'Select all' }}
+                </button>
                 <FilterBar
                   :status-filter="statusFilter"
                   :priority-filter="priorityFilter"
@@ -192,7 +210,15 @@
                 @dragend="onDragEnd"
               >
                 <div class="flex items-start gap-3">
-                  <span class="flex-shrink-0 mt-1 text-secondary-300 dark:text-secondary-600 cursor-grab" aria-hidden="true" title="Drag to reorder">
+                  <input
+                    v-if="selectMode"
+                    type="checkbox"
+                    class="flex-shrink-0 mt-1 rounded border-secondary-300 text-primary-600 focus:ring-primary-500"
+                    :checked="selectedIds.has(todo.id)"
+                    :aria-label="`Select ${todo.title}`"
+                    @change="toggleSelected(todo.id)"
+                  />
+                  <span v-else class="flex-shrink-0 mt-1 text-secondary-300 dark:text-secondary-600 cursor-grab" aria-hidden="true" title="Drag to reorder">
                     <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="15" cy="18" r="1.5" /></svg>
                   </span>
                   <button
@@ -323,6 +349,16 @@
           <PomodoroTimer v-if="view === 'focus'" :todos="todos" @logged="onPomodoroLogged" />
         </div>
       </div>
+
+      <!-- Bulk action bar -->
+      <BulkActionBar
+        v-if="selectMode"
+        :selected-count="selectedIds.size"
+        :folders="folders"
+        :busy="bulkBusy"
+        @action="handleBulkAction"
+        @clear="clearSelection"
+      />
 
       <!-- Floating create button -->
       <button
@@ -455,6 +491,61 @@ const summaryRefresh = ref(0)
 // Drag & drop
 const draggingIndex = ref<number | null>(null)
 const dragOverIndex = ref<number | null>(null)
+
+// Bulk selection
+const selectMode = ref(false)
+const selectedIds = ref<Set<string>>(new Set())
+const bulkBusy = ref(false)
+
+const allVisibleSelected = computed(
+  () => todos.value.length > 0 && todos.value.every((t) => selectedIds.value.has(t.id)),
+)
+
+function toggleSelectMode() {
+  selectMode.value = !selectMode.value
+  if (!selectMode.value) selectedIds.value = new Set()
+}
+
+function toggleSelected(id: string) {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+
+function selectAllVisible() {
+  if (allVisibleSelected.value) {
+    selectedIds.value = new Set()
+  } else {
+    selectedIds.value = new Set(todos.value.map((t) => t.id))
+  }
+}
+
+function clearSelection() {
+  selectedIds.value = new Set()
+}
+
+async function handleBulkAction(action: string, payload?: Record<string, unknown>) {
+  const ids = Array.from(selectedIds.value)
+  if (ids.length === 0) return
+  bulkBusy.value = true
+  try {
+    const result = await todosApi.bulk(ids, action, payload)
+    const s = result.summary
+    const parts: string[] = []
+    if (s.succeeded) parts.push(`${s.succeeded} updated`)
+    if (s.no_change) parts.push(`${s.no_change} unchanged`)
+    if (s.not_found) parts.push(`${s.not_found} missing`)
+    if (s.validation_error) parts.push(`${s.validation_error} invalid`)
+    toastSuccess(parts.length ? parts.join(', ') : 'Done')
+    await Promise.all([fetchTodos(), fetchStats(), refreshTags()])
+    clearSelection()
+  } catch (err: any) {
+    toastError(err?.data?.detail || err?.message || 'Bulk action failed')
+  } finally {
+    bulkBusy.value = false
+  }
+}
 
 // AI status
 const aiEnabled = ref(false)

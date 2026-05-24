@@ -53,6 +53,14 @@ class SubtaskSuggestion(BaseModel):
     title: str
 
 
+class BulkActionRequest(BaseModel):
+    """Body for the bulk-action endpoint."""
+
+    ids: list[str] = Field(default_factory=list)
+    action: str
+    payload: dict | None = None
+
+
 # --- Static-path endpoints (MUST come before /{todo_id} routes) -----------
 
 
@@ -66,6 +74,24 @@ async def get_stats(current_user: User = Depends(get_current_user)) -> TodoStats
 async def list_tags(current_user: User = Depends(get_current_user)) -> list[dict]:
     """Distinct tags used by the user with usage counts."""
     return todo_service.list_tags(current_user.id)
+
+
+@router.post("/bulk")
+async def bulk_action(
+    body: BulkActionRequest,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Apply ``body.action`` across ``body.ids`` in a single atomic write."""
+    # Lazy import to avoid circular import (folders depends on todos)
+    from routers.folders import folder_store
+
+    return todo_service.bulk_action(
+        user_id=current_user.id,
+        ids=body.ids,
+        action=body.action,
+        payload=body.payload,
+        folder_store=folder_store,
+    )
 
 
 @router.post("/reorder", response_model=list[Todo])
