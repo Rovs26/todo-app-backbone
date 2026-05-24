@@ -226,6 +226,7 @@ async def list_todos(
     tag: str | None = Query(default=None, description="Filter by tag (case-insensitive exact match)"),
     search: str | None = Query(default=None, description="Free-text search over title, description, tags"),
     folder_id: str | None = Query(default=None, description="Filter by folder id, or 'none' for unassigned"),
+    recurrence: str | None = Query(default=None, description="Filter by recurrence cadence"),
     current_user: User = Depends(get_current_user),
 ) -> list[Todo]:
     """List todos for the authenticated user with optional filtering and sorting."""
@@ -237,6 +238,7 @@ async def list_todos(
         tag=tag,
         search=search,
         folder_id=folder_id,
+        recurrence=recurrence,
     )
 
 
@@ -343,19 +345,26 @@ async def get_todo(
 async def update_todo(
     todo_id: str,
     todo_data: TodoUpdate,
+    apply_to: str = Query(default="occurrence", description="occurrence | series"),
     current_user: User = Depends(get_current_user),
 ) -> Todo:
     """Update a specific todo by ID."""
-    return todo_service.update(user_id=current_user.id, todo_id=todo_id, data=todo_data)
+    return todo_service.update(
+        user_id=current_user.id,
+        todo_id=todo_id,
+        data=todo_data,
+        apply_to=apply_to,
+    )
 
 
 @router.delete("/{todo_id}", status_code=204)
 async def delete_todo(
     todo_id: str,
+    apply_to: str = Query(default="occurrence", description="occurrence | series"),
     current_user: User = Depends(get_current_user),
 ) -> Response:
     """Delete a specific todo by ID."""
-    todo_service.delete(user_id=current_user.id, todo_id=todo_id)
+    todo_service.delete(user_id=current_user.id, todo_id=todo_id, apply_to=apply_to)
     return Response(status_code=204)
 
 

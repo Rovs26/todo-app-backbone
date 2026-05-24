@@ -551,10 +551,10 @@ function closeForm() {
 async function handleFormSubmit(payload: any) {
   if (editingTodo.value) {
     const id = editingTodo.value.id
-    const data = payload as TodoUpdate & { _imageFile?: File | null; _removeImage?: boolean }
-    const { _imageFile, _removeImage, ...rest } = data
+    const data = payload as TodoUpdate & { _imageFile?: File | null; _removeImage?: boolean; _applyTo?: 'occurrence' | 'series' }
+    const { _imageFile, _removeImage, _applyTo, ...rest } = data
 
-    const result = await updateTodo(id, rest)
+    const result = await updateTodo(id, rest, _applyTo || 'occurrence')
     if (!result) {
       toastError(todosError.value || 'Could not save todo')
       return

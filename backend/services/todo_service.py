@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from exceptions import NotFoundError, ValidationError
 from models import (
     Priority,
+    Recurrence,
     Status,
     Subtask,
     Todo,
@@ -14,6 +15,7 @@ from models import (
     TodoStats,
     TodoUpdate,
 )
+from services.recurrence import next_occurrence_date, shift_reminder
 from store import JSONStore
 
 
@@ -98,6 +100,25 @@ class TodoService:
             parsed_reminder = self._validate_reminder_at(data.reminder_at)
             reminder_at_value = parsed_reminder.isoformat()
 
+        # Recurrence validation + series setup
+        recurrence_value = (
+            data.recurrence.value if data.recurrence else Recurrence.NONE.value
+        )
+        recurrence_until = data.recurrence_until
+        recurrence_count = data.recurrence_count
+        recurrence_series_id: str | None = None
+
+        if recurrence_value != Recurrence.NONE.value:
+            if not data.due_date:
+                raise ValidationError(
+                    [{"field": "due_date", "message": "Recurring todos require a due_date"}]
+                )
+            self._validate_recurrence_bounds(recurrence_until, recurrence_count, data.due_date)
+            recurrence_series_id = str(uuid.uuid4())
+        else:
+            recurrence_until = None
+            recurrence_count = None
+
         # Create todo record with defaults
         existing_records = self.todo_store.read_all()
         max_position = max(
@@ -119,11 +140,29 @@ class TodoService:
             "image_url": None,
             "position": max_position + 1,
             "time_spent_seconds": 0,
+            "comments": [],
+            "recurrence": recurrence_value,
+            "recurrence_until": recurrence_until,
+            "recurrence_count": recurrence_count,
+            "recurrence_series_id": recurrence_series_id,
+            "recurrence_index": 0,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": None,
         }
 
-        self.todo_store.add(todo_data)
+        # If created already-done with recurrence, spawn next atomically.
+        if (
+            recurrence_value != Recurrence.NONE.value
+            and todo_data["status"] == Status.DONE.value
+        ):
+            next_row = self._build_next_occurrence(todo_data)
+            records = self.todo_store.read_all()
+            records.append(todo_data)
+            if next_row:
+                records.append(next_row)
+            self.todo_store.write_all(records)
+        else:
+            self.todo_store.add(todo_data)
 
         return Todo(**todo_data)
 
@@ -136,6 +175,7 @@ class TodoService:
         tag: str | None = None,
         search: str | None = None,
         folder_id: str | None = None,
+        recurrence: str | None = None,
     ) -> list[Todo]:
         """List user's todos with optional filtering and sorting.
 
@@ -165,6 +205,13 @@ class TodoService:
                     [{"field": "sort_by", "message": f"Invalid sort_by value. Must be one of: {', '.join(valid_sorts)}"}]
                 )
 
+        if recurrence is not None:
+            valid_rec = [r.value for r in Recurrence]
+            if recurrence not in valid_rec:
+                raise ValidationError(
+                    [{"field": "recurrence", "message": f"Invalid recurrence. Must be one of: {', '.join(valid_rec)}"}]
+                )
+
         # Get all records and filter by user_id
         all_records = self.todo_store.read_all()
         user_todos = [r for r in all_records if r.get("user_id") == user_id]
@@ -182,6 +229,10 @@ class TodoService:
             tag_lower = tag.strip().lower()
             if tag_lower:
                 user_todos = [r for r in user_todos if tag_lower in (r.get("tags") or [])]
+
+        # Apply recurrence filter
+        if recurrence is not None:
+            user_todos = [r for r in user_todos if (r.get("recurrence") or "none") == recurrence]
 
         # Apply folder filter ("none" matches todos with no folder)
         if folder_id is not None:
@@ -234,32 +285,24 @@ class TodoService:
 
         return Todo(**record)
 
-    def update(self, user_id: str, todo_id: str, data: TodoUpdate) -> Todo:
-        """Update a todo.
+    def update(
+        self,
+        user_id: str,
+        todo_id: str,
+        data: TodoUpdate,
+        apply_to: str = "occurrence",
+    ) -> Todo:
+        """Update a todo. ``apply_to=series`` cascades to future occurrences."""
+        if apply_to not in ("occurrence", "series"):
+            raise ValidationError(
+                [{"field": "apply_to", "message": "apply_to must be 'occurrence' or 'series'"}]
+            )
 
-        Finds the todo, verifies ownership, updates only provided fields,
-        and sets updated_at.
-
-        Args:
-            user_id: The authenticated user's ID.
-            todo_id: The todo's ID to update.
-            data: TodoUpdate model with fields to update.
-
-        Returns:
-            The updated Todo object.
-
-        Raises:
-            NotFoundError: If todo is not found or not owned by user.
-            ValidationError: If updated fields are invalid.
-        """
-        # Find and verify ownership
         record = self.todo_store.find_by_id(todo_id)
-
         if not record or record.get("user_id") != user_id:
             raise NotFoundError("Todo not found")
 
-        # Build updates dict with only provided fields
-        updates = {}
+        updates: dict = {}
 
         if data.title is not None:
             if not data.title.strip():
@@ -278,7 +321,6 @@ class TodoService:
 
         if data.reminder_at is not None:
             if data.reminder_at == "":
-                # Explicit empty string clears the reminder
                 updates["reminder_at"] = None
             else:
                 parsed_reminder = self._validate_reminder_at(data.reminder_at)
@@ -294,46 +336,153 @@ class TodoService:
             updates["subtasks"] = _normalize_subtasks(data.subtasks)
 
         if data.folder_id is not None:
-            # Empty string clears the folder assignment
             updates["folder_id"] = data.folder_id or None
 
         if data.position is not None:
             updates["position"] = int(data.position)
 
-        # Set updated_at timestamp
+        # Recurrence transitions
+        rec_changed = data.recurrence is not None
+        new_rec = data.recurrence.value if rec_changed else record.get("recurrence", Recurrence.NONE.value)
+        if rec_changed:
+            updates["recurrence"] = new_rec
+            if new_rec == Recurrence.NONE.value:
+                updates["recurrence_until"] = None
+                updates["recurrence_count"] = None
+                updates["recurrence_series_id"] = None
+            else:
+                # turning recurrence on -> fresh series id (only when previously none)
+                if record.get("recurrence", Recurrence.NONE.value) == Recurrence.NONE.value:
+                    updates["recurrence_series_id"] = str(uuid.uuid4())
+
+        if data.recurrence_until is not None:
+            updates["recurrence_until"] = data.recurrence_until or None
+        if data.recurrence_count is not None:
+            updates["recurrence_count"] = data.recurrence_count
+
+        # Re-validate recurrence bounds against effective values
+        effective_rec = updates.get("recurrence", record.get("recurrence", Recurrence.NONE.value))
+        if effective_rec != Recurrence.NONE.value:
+            eff_due = updates.get("due_date", record.get("due_date"))
+            if not eff_due:
+                raise ValidationError(
+                    [{"field": "due_date", "message": "Recurring todos require a due_date"}]
+                )
+            self._validate_recurrence_bounds(
+                updates.get("recurrence_until", record.get("recurrence_until")),
+                updates.get("recurrence_count", record.get("recurrence_count")),
+                eff_due,
+            )
+
         updates["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-        # Persist updates
-        updated_record = self.todo_store.update(todo_id, updates)
+        # Detect status transition to done for spawn-next
+        was_done = record.get("status") == Status.DONE.value
+        will_be_done = updates.get("status") == Status.DONE.value if "status" in updates else was_done
+        transitioning_to_done = (not was_done) and will_be_done
 
-        if not updated_record:
+        records = self.todo_store.read_all()
+        idx = next((i for i, r in enumerate(records) if r.get("id") == todo_id), None)
+        if idx is None:
             raise NotFoundError("Todo not found")
 
+        # Capture old due/reminder for series-cascade delta math
+        old_due = record.get("due_date")
+        old_reminder = record.get("reminder_at")
+
+        records[idx].update(updates)
+        updated_record = records[idx]
+
+        # Apply-to-series cascade onto future occurrences
+        if apply_to == "series":
+            series_id = updated_record.get("recurrence_series_id")
+            if series_id:
+                target_index = updated_record.get("recurrence_index", 0)
+                for i, r in enumerate(records):
+                    if (
+                        r.get("id") != todo_id
+                        and r.get("recurrence_series_id") == series_id
+                        and r.get("recurrence_index", 0) > target_index
+                    ):
+                        merged = {
+                            k: v for k, v in updates.items()
+                            if k not in ("due_date", "reminder_at")
+                        }
+                        # apply due/reminder as deltas
+                        if "due_date" in updates and old_due and updates["due_date"]:
+                            try:
+                                from datetime import date as _d, timedelta as _td
+                                delta_days = (_d.fromisoformat(updates["due_date"]) - _d.fromisoformat(old_due)).days
+                                if r.get("due_date"):
+                                    new_d = _d.fromisoformat(r["due_date"]) + _td(days=delta_days)
+                                    merged["due_date"] = new_d.isoformat()
+                            except (ValueError, TypeError):
+                                pass
+                        if "reminder_at" in updates and old_reminder and updates.get("reminder_at"):
+                            try:
+                                old_rem_dt = datetime.fromisoformat(old_reminder if isinstance(old_reminder, str) else old_reminder.isoformat())
+                                new_rem_dt = datetime.fromisoformat(updates["reminder_at"])
+                                delta = new_rem_dt - old_rem_dt
+                                cur = r.get("reminder_at")
+                                if cur:
+                                    merged["reminder_at"] = (datetime.fromisoformat(cur) + delta).isoformat()
+                            except (ValueError, TypeError):
+                                pass
+                        # never overwrite per-occurrence identity
+                        for k in ("id", "created_at", "recurrence_index", "recurrence_series_id", "position"):
+                            merged.pop(k, None)
+                        records[i].update(merged)
+
+        # Spawn next occurrence atomically when transitioning to done
+        if (
+            transitioning_to_done
+            and updated_record.get("recurrence", Recurrence.NONE.value) != Recurrence.NONE.value
+        ):
+            next_row = self._build_next_occurrence(updated_record)
+            if next_row:
+                records.append(next_row)
+
+        self.todo_store.write_all(records)
         return Todo(**updated_record)
 
-    def delete(self, user_id: str, todo_id: str) -> None:
-        """Delete a todo.
+    def delete(self, user_id: str, todo_id: str, apply_to: str = "occurrence") -> int:
+        """Delete a todo. With ``apply_to=series`` removes future occurrences too.
 
-        Finds the todo, verifies ownership, and removes from store.
-
-        Args:
-            user_id: The authenticated user's ID.
-            todo_id: The todo's ID to delete.
-
-        Raises:
-            NotFoundError: If todo is not found or not owned by user.
+        Returns the number of todos removed.
         """
-        # Find and verify ownership
-        record = self.todo_store.find_by_id(todo_id)
+        if apply_to not in ("occurrence", "series"):
+            raise ValidationError(
+                [{"field": "apply_to", "message": "apply_to must be 'occurrence' or 'series'"}]
+            )
 
+        record = self.todo_store.find_by_id(todo_id)
         if not record or record.get("user_id") != user_id:
             raise NotFoundError("Todo not found")
 
-        # Remove from store
-        deleted = self.todo_store.delete(todo_id)
+        if (
+            apply_to == "series"
+            and record.get("recurrence_series_id")
+            and record.get("recurrence", Recurrence.NONE.value) != Recurrence.NONE.value
+        ):
+            series_id = record["recurrence_series_id"]
+            target_index = record.get("recurrence_index", 0)
+            records = self.todo_store.read_all()
+            survivors = [
+                r for r in records
+                if not (
+                    r.get("recurrence_series_id") == series_id
+                    and r.get("user_id") == user_id
+                    and r.get("recurrence_index", 0) >= target_index
+                )
+            ]
+            removed = len(records) - len(survivors)
+            self.todo_store.write_all(survivors)
+            return removed
 
+        deleted = self.todo_store.delete(todo_id)
         if not deleted:
             raise NotFoundError("Todo not found")
+        return 1
 
     def reorder(self, user_id: str, ordered_ids: list[str]) -> list[Todo]:
         """Persist a manual ordering for the given todo ids.
@@ -431,6 +580,100 @@ class TodoService:
                     pass
 
         return TodoStats(total=total, completed=completed, pending=pending, overdue=overdue)
+
+    def _validate_recurrence_bounds(
+        self,
+        recurrence_until: str | None,
+        recurrence_count: int | None,
+        due_date: str,
+    ) -> None:
+        if recurrence_until is not None and recurrence_count is not None:
+            raise ValidationError(
+                [{"field": "recurrence_until", "message": "Only one of recurrence_until or recurrence_count may be set"}]
+            )
+        if recurrence_until is not None:
+            self._validate_due_date(recurrence_until)
+            if recurrence_until <= due_date:
+                raise ValidationError(
+                    [{"field": "recurrence_until", "message": "recurrence_until must be after due_date"}]
+                )
+        if recurrence_count is not None:
+            try:
+                count_int = int(recurrence_count)
+            except (TypeError, ValueError):
+                raise ValidationError(
+                    [{"field": "recurrence_count", "message": "recurrence_count must be an integer"}]
+                )
+            if count_int <= 0 or count_int > 1000:
+                raise ValidationError(
+                    [{"field": "recurrence_count", "message": "recurrence_count must be 1..1000"}]
+                )
+
+    def _build_next_occurrence(self, source_row: dict) -> dict | None:
+        """Compute and return the next-occurrence row, or None if capped."""
+        recurrence = source_row.get("recurrence", Recurrence.NONE.value)
+        due_date = source_row.get("due_date")
+        if recurrence == Recurrence.NONE.value or not due_date:
+            return None
+
+        try:
+            next_due = next_occurrence_date(due_date, recurrence)
+        except ValueError:
+            return None
+
+        rec_until = source_row.get("recurrence_until")
+        if rec_until and next_due > rec_until:
+            return None
+
+        cur_index = int(source_row.get("recurrence_index") or 0)
+        new_index = cur_index + 1
+        rec_count = source_row.get("recurrence_count")
+        if rec_count is not None and new_index >= int(rec_count):
+            return None
+
+        new_reminder = None
+        if source_row.get("reminder_at"):
+            try:
+                rem_str = source_row["reminder_at"]
+                if isinstance(rem_str, datetime):
+                    rem_str = rem_str.isoformat()
+                new_reminder = shift_reminder(rem_str, due_date, next_due)
+            except (ValueError, TypeError):
+                new_reminder = None
+
+        # reset subtasks done flags
+        new_subtasks = []
+        for st in source_row.get("subtasks") or []:
+            new_subtasks.append({
+                "id": str(uuid.uuid4()),
+                "title": st.get("title", ""),
+                "done": False,
+            })
+
+        return {
+            "id": str(uuid.uuid4()),
+            "user_id": source_row["user_id"],
+            "title": source_row.get("title", ""),
+            "description": source_row.get("description"),
+            "priority": source_row.get("priority", Priority.MEDIUM.value),
+            "due_date": next_due,
+            "reminder_at": new_reminder,
+            "status": Status.PENDING.value,
+            "folder_id": source_row.get("folder_id"),
+            "tags": list(source_row.get("tags") or []),
+            "subtasks": new_subtasks,
+            "image_url": None,
+            "position": int(source_row.get("position", 0)),
+            "time_spent_seconds": 0,
+            "comments": [],
+            "recurrence": recurrence,
+            "recurrence_until": rec_until,
+            "recurrence_count": rec_count,
+            "recurrence_series_id": source_row.get("recurrence_series_id"),
+            "recurrence_index": new_index,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": None,
+        }
 
     def _validate_due_date(self, due_date: str) -> None:
         """Validate that due_date is a valid ISO 8601 date (YYYY-MM-DD).

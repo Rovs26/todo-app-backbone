@@ -238,6 +238,35 @@
                 </div>
               </div>
 
+              <!-- Recurrence -->
+              <div class="mb-4 rounded-md border border-secondary-200 dark:border-secondary-700 p-3">
+                <div class="flex items-center gap-2 mb-2">
+                  <label class="text-sm font-medium text-secondary-700 dark:text-secondary-300">🔁 Repeats</label>
+                  <select v-model="form.recurrence" class="text-sm bg-white dark:bg-secondary-800 border border-secondary-300 dark:border-secondary-700 rounded px-2 py-1">
+                    <option value="none">None</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+                </div>
+                <div v-if="form.recurrence !== 'none'" class="flex flex-wrap gap-3 text-xs">
+                  <label class="flex items-center gap-1">
+                    Ends on
+                    <input type="date" v-model="form.recurrence_until" :disabled="!!form.recurrence_count" class="text-xs border border-secondary-300 dark:border-secondary-700 rounded px-1 bg-white dark:bg-secondary-800" />
+                  </label>
+                  <label class="flex items-center gap-1">
+                    After N times
+                    <input type="number" min="1" max="1000" v-model.number="form.recurrence_count" :disabled="!!form.recurrence_until" class="w-20 text-xs border border-secondary-300 dark:border-secondary-700 rounded px-1 bg-white dark:bg-secondary-800" />
+                  </label>
+                </div>
+                <div v-if="isEditing && (props.todo?.recurrence && props.todo.recurrence !== 'none')" class="mt-2 text-xs">
+                  <label class="mr-2">Apply to:</label>
+                  <label class="mr-3"><input type="radio" v-model="applyTo" value="occurrence" /> this occurrence</label>
+                  <label><input type="radio" v-model="applyTo" value="series" /> this and future</label>
+                </div>
+              </div>
+
               <!-- Image -->
               <div class="mb-4">
                 <label class="block text-sm font-medium text-secondary-700 dark:text-secondary-300 mb-1.5">Image</label>
@@ -317,7 +346,12 @@ const form = reactive({
   folder_id: '' as string,
   tags: [] as string[],
   subtasks: [] as Subtask[],
+  recurrence: 'none' as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly',
+  recurrence_until: '',
+  recurrence_count: null as number | null,
 })
+
+const applyTo = ref<'occurrence' | 'series'>('occurrence')
 
 const errors = reactive({
   title: '',
@@ -386,6 +420,9 @@ function hydrateFromProps() {
     form.folder_id = props.todo.folder_id ?? ''
     form.tags = [...(props.todo.tags || [])]
     form.subtasks = (props.todo.subtasks || []).map((s) => ({ ...s }))
+    form.recurrence = (props.todo.recurrence || 'none') as any
+    form.recurrence_until = props.todo.recurrence_until ?? ''
+    form.recurrence_count = props.todo.recurrence_count ?? null
     if (props.todo.image_url) {
       imagePreview.value = resolveImageUrl(props.todo.image_url)
     }
@@ -399,7 +436,11 @@ function hydrateFromProps() {
     form.folder_id = ''
     form.tags = []
     form.subtasks = []
+    form.recurrence = 'none'
+    form.recurrence_until = ''
+    form.recurrence_count = null
   }
+  applyTo.value = 'occurrence'
 }
 
 function clearErrors() {
@@ -528,6 +569,14 @@ function validate(): boolean {
     const r = new Date(form.reminder_at)
     if (isNaN(r.getTime())) { errors.reminder_at = 'Invalid date and time'; valid = false }
   }
+  if (form.recurrence !== 'none' && !form.due_date) {
+    errors.due_date = 'Recurring todos require a due date'
+    valid = false
+  }
+  if (form.recurrence_until && form.recurrence_count) {
+    errors.general = 'Set either an end date or a count, not both'
+    valid = false
+  }
   return valid
 }
 
@@ -563,6 +612,13 @@ function handleSubmit() {
     if (imageFile.value) data._imageFile = imageFile.value
     if (removeImageFlag.value && !imageFile.value) data._removeImage = true
 
+    if (form.recurrence !== (todo.recurrence || 'none')) data.recurrence = form.recurrence
+    const newUntil = form.recurrence_until || null
+    if (newUntil !== (todo.recurrence_until ?? null)) data.recurrence_until = newUntil
+    const newCount = form.recurrence_count ?? null
+    if (newCount !== (todo.recurrence_count ?? null)) data.recurrence_count = newCount as any
+
+    ;(data as any)._applyTo = applyTo.value
     emit('submit', data)
   } else {
     const data: TodoCreate & { _imageFile?: File | null } = {
@@ -579,6 +635,11 @@ function handleSubmit() {
     if (form.tags.length) data.tags = [...form.tags]
     if (form.subtasks.length) data.subtasks = form.subtasks.map((s) => ({ ...s })) as any
     if (imageFile.value) data._imageFile = imageFile.value
+    if (form.recurrence !== 'none') {
+      data.recurrence = form.recurrence
+      if (form.recurrence_until) data.recurrence_until = form.recurrence_until
+      if (form.recurrence_count) data.recurrence_count = form.recurrence_count
+    }
     emit('submit', data)
   }
   submitting.value = false

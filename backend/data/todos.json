@@ -1,1 +1,53 @@
-[]
+[
+  {
+    "id": "cd92aa6f-3e29-41ac-96b8-d43f0cbb32dc",
+    "user_id": "b2a5e3f1-0b76-4bdb-b8c1-b3bb9af034a2",
+    "title": "Kiro Workshop",
+    "description": null,
+    "priority": "medium",
+    "due_date": "2026-05-24",
+    "reminder_at": "2026-05-24T10:00:00+00:00",
+    "status": "pending",
+    "created_at": "2026-05-24T09:59:37.899146+00:00",
+    "updated_at": "2026-05-24T10:25:23.509789+00:00"
+  },
+  {
+    "id": "db4a0046-d10e-4ef8-be1e-a3ef2fa58e46",
+    "user_id": "b2a5e3f1-0b76-4bdb-b8c1-b3bb9af034a2",
+    "title": "Finish this todo list",
+    "description": "Finish this while I still have credits",
+    "priority": "high",
+    "due_date": "2026-05-24",
+    "reminder_at": "2026-05-24T14:00:00+00:00",
+    "status": "pending",
+    "folder_id": null,
+    "tags": [],
+    "subtasks": [
+      {
+        "id": "55b7b410-10e4-4ee4-bbfd-6462feb2dcc8",
+        "title": "Finish AI integration",
+        "done": false
+      },
+      {
+        "id": "73694dab-2ea8-4c46-ad53-11b005bbe318",
+        "title": "Add more tasks and features",
+        "done": false
+      },
+      {
+        "id": "45616333-d244-441c-8b30-5151af48b93b",
+        "title": "create a way to innovate",
+        "done": false
+      },
+      {
+        "id": "f9dc467d-a5c7-4614-8c99-762c467356d3",
+        "title": "deploy",
+        "done": false
+      }
+    ],
+    "image_url": null,
+    "position": 1,
+    "time_spent_seconds": 0,
+    "created_at": "2026-05-24T13:10:08.798421+00:00",
+    "updated_at": "2026-05-24T13:10:14.980976+00:00"
+  }
+]

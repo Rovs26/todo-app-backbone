@@ -56,6 +56,16 @@ class Status(str, Enum):
     DONE = "done"
 
 
+class Recurrence(str, Enum):
+    """Recurrence cadence for todos."""
+
+    NONE = "none"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    YEARLY = "yearly"
+
+
 # --- Todo Models ---
 
 
@@ -85,6 +95,11 @@ class Todo(BaseModel):
     position: int = 0  # User-defined ordering (lower first)
     time_spent_seconds: int = 0  # Pomodoro / focus time accumulator
     comments: list["Comment"] = Field(default_factory=list)
+    recurrence: Recurrence = Recurrence.NONE
+    recurrence_until: str | None = None  # ISO 8601 date or None
+    recurrence_count: int | None = None  # positive int or None
+    recurrence_series_id: str | None = None  # shared UUID across occurrences
+    recurrence_index: int = 0  # 0-based position in series
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -175,6 +190,9 @@ class TodoCreate(BaseModel):
     folder_id: str | None = None
     tags: list[str] | None = None
     subtasks: list[Subtask] | None = None
+    recurrence: Recurrence | None = None
+    recurrence_until: str | None = None
+    recurrence_count: int | None = None
 
 
 class TodoUpdate(BaseModel):
@@ -190,6 +208,9 @@ class TodoUpdate(BaseModel):
     tags: list[str] | None = None
     subtasks: list[Subtask] | None = None
     position: int | None = None
+    recurrence: Recurrence | None = None
+    recurrence_until: str | None = None
+    recurrence_count: int | None = None
 
 
 class TodoStats(BaseModel):

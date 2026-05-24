@@ -47,11 +47,17 @@ export function useTodos() {
       due_date: data.due_date ?? null,
       reminder_at: data.reminder_at ?? null,
       status: data.status ?? 'pending',
+      folder_id: data.folder_id ?? null,
       tags: data.tags ?? [],
       subtasks: data.subtasks ?? [],
       image_url: null,
       position: 0,
       time_spent_seconds: 0,
+      recurrence: (data.recurrence ?? 'none') as any,
+      recurrence_until: data.recurrence_until ?? null,
+      recurrence_count: data.recurrence_count ?? null,
+      recurrence_series_id: null,
+      recurrence_index: 0,
       created_at: new Date().toISOString(),
       updated_at: null,
     }
@@ -77,7 +83,7 @@ export function useTodos() {
     }
   }
 
-  async function updateTodo(id: string, data: TodoUpdate): Promise<Todo | null> {
+  async function updateTodo(id: string, data: TodoUpdate, applyTo: 'occurrence' | 'series' = 'occurrence'): Promise<Todo | null> {
     clearError()
 
     // Optimistic update: save original and apply changes immediately
@@ -96,7 +102,7 @@ export function useTodos() {
     store.todos[index] = optimisticTodo
 
     try {
-      const updated = await todosApi.update(id, data)
+      const updated = await todosApi.update(id, data, applyTo)
       // Replace with the server response
       const currentIndex = store.todos.findIndex((t) => t.id === id)
       if (currentIndex !== -1) {
@@ -117,7 +123,7 @@ export function useTodos() {
     }
   }
 
-  async function deleteTodo(id: string): Promise<boolean> {
+  async function deleteTodo(id: string, applyTo: 'occurrence' | 'series' = 'occurrence'): Promise<boolean> {
     clearError()
 
     // Optimistic update: remove the todo immediately
@@ -132,7 +138,7 @@ export function useTodos() {
     store.todos.splice(index, 1)
 
     try {
-      await todosApi.delete(id)
+      await todosApi.delete(id, applyTo)
       return true
     } catch (err: any) {
       // Rollback: re-insert the todo at its original position

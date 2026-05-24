@@ -92,12 +92,12 @@ export const todosApi = {
     return apiFetch<Todo>('/todos', { method: 'POST', body: data })
   },
 
-  update(id: string, data: TodoUpdate) {
-    return apiFetch<Todo>(`/todos/${id}`, { method: 'PUT', body: data })
+  update(id: string, data: TodoUpdate, applyTo: 'occurrence' | 'series' = 'occurrence') {
+    return apiFetch<Todo>(`/todos/${id}`, { method: 'PUT', body: data, params: { apply_to: applyTo } })
   },
 
-  delete(id: string) {
-    return apiFetch<void>(`/todos/${id}`, { method: 'DELETE' })
+  delete(id: string, applyTo: 'occurrence' | 'series' = 'occurrence') {
+    return apiFetch<void>(`/todos/${id}`, { method: 'DELETE', params: { apply_to: applyTo } })
   },
 
   stats() {

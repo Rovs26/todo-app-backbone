@@ -31,6 +31,8 @@ export interface FolderStats {
   pending: number
 }
 
+export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
+
 export interface Todo {
   id: string
   user_id: string
@@ -46,6 +48,11 @@ export interface Todo {
   image_url: string | null
   position: number
   time_spent_seconds: number
+  recurrence: Recurrence
+  recurrence_until: string | null
+  recurrence_count: number | null
+  recurrence_series_id: string | null
+  recurrence_index: number
   created_at: string
   updated_at: string | null
 }
@@ -58,10 +65,10 @@ export interface TodoStats {
 }
 
 export type TodoCreate = Pick<Todo, 'title'> &
-  Partial<Pick<Todo, 'description' | 'priority' | 'due_date' | 'reminder_at' | 'status' | 'folder_id' | 'tags' | 'subtasks'>>
+  Partial<Pick<Todo, 'description' | 'priority' | 'due_date' | 'reminder_at' | 'status' | 'folder_id' | 'tags' | 'subtasks' | 'recurrence' | 'recurrence_until' | 'recurrence_count'>>
 
 export type TodoUpdate = Partial<
-  Pick<Todo, 'title' | 'description' | 'priority' | 'due_date' | 'reminder_at' | 'status' | 'folder_id' | 'tags' | 'subtasks' | 'position'>
+  Pick<Todo, 'title' | 'description' | 'priority' | 'due_date' | 'reminder_at' | 'status' | 'folder_id' | 'tags' | 'subtasks' | 'position' | 'recurrence' | 'recurrence_until' | 'recurrence_count'>
 >
 
 export interface TagInfo {

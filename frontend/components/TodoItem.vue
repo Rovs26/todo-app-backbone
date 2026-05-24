@@ -77,6 +77,15 @@
             {{ statusLabel }}
           </button>
 
+          <!-- Recurrence badge -->
+          <span
+            v-if="todo.recurrence && todo.recurrence !== 'none'"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300"
+            :title="`Recurs ${todo.recurrence}`"
+          >
+            🔁 {{ todo.recurrence }}
+          </span>
+
           <!-- Due date -->
           <span
             v-if="todo.due_date"
