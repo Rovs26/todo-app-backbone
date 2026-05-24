@@ -84,8 +84,83 @@ class Todo(BaseModel):
     image_url: str | None = None  # Server-relative URL (set by upload endpoint)
     position: int = 0  # User-defined ordering (lower first)
     time_spent_seconds: int = 0  # Pomodoro / focus time accumulator
+    comments: list["Comment"] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime | None = None
+
+
+# --- Comment / Attachment / Mention Models ---
+
+
+class Attachment(BaseModel):
+    """An image attachment uploaded by a user.
+
+    Registered in ``data/attachments.json`` at upload time. The file is
+    bound to a Comment when the comment is created or edited.
+    """
+
+    id: str  # UUID4 string
+    owner_id: str  # User.id who uploaded it
+    comment_id: str | None = None  # null until bound to a comment
+    todo_id: str | None = None  # mirrors the comment's todo when bound
+    url: str  # Server-relative URL, e.g. /uploads/comments/<uuid>.png
+    mime_type: str  # png|jpeg|gif|webp
+    size_bytes: int
+    original_name: str  # sanitized; never used for the on-disk filename
+    created_at: datetime
+
+
+class MentionRef(BaseModel):
+    """A resolved @mention pair inside a comment body."""
+
+    username: str  # Original token text (case preserved)
+    user_id: str  # Resolved User.id
+
+
+class Comment(BaseModel):
+    """Internal comment model (persisted as element of ``Todo.comments``)."""
+
+    id: str
+    todo_id: str
+    author_id: str
+    parent_comment_id: str | None = None  # null = top-level
+    body: str
+    attachment_ids: list[str] = Field(default_factory=list)
+    mentions: list[MentionRef] = Field(default_factory=list)
+    is_tombstone: bool = False
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class CommentResponse(BaseModel):
+    """Read-shape comment for API responses (denormalized helpers)."""
+
+    id: str
+    todo_id: str
+    author_id: str
+    author_username: str
+    parent_comment_id: str | None = None
+    body: str
+    attachments: list[Attachment] = Field(default_factory=list)
+    mentions: list[MentionRef] = Field(default_factory=list)
+    is_tombstone: bool = False
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class CommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+    parent_comment_id: str | None = None
+    attachment_ids: list[str] = Field(default_factory=list, max_length=4)
+
+
+class CommentUpdate(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+    attachment_ids: list[str] = Field(default_factory=list, max_length=4)
+
+
+# Forward-ref resolution for Todo.comments
+Todo.model_rebuild()
 
 
 class TodoCreate(BaseModel):

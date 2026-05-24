@@ -88,6 +88,53 @@ export interface FolderCreate {
 
 export type FolderUpdate = Partial<FolderCreate>
 
+export interface Attachment {
+  id: string
+  owner_id: string
+  comment_id: string | null
+  todo_id: string | null
+  url: string
+  mime_type: string
+  size_bytes: number
+  original_name: string
+  created_at: string
+}
+
+export interface MentionRef {
+  username: string
+  user_id: string
+}
+
+export interface Comment {
+  id: string
+  todo_id: string
+  author_id: string
+  author_username: string
+  parent_comment_id: string | null
+  body: string
+  attachments: Attachment[]
+  mentions: MentionRef[]
+  is_tombstone: boolean
+  created_at: string
+  updated_at: string | null
+}
+
+export interface CommentCreate {
+  body: string
+  parent_comment_id?: string | null
+  attachment_ids?: string[]
+}
+
+export interface CommentUpdate {
+  body: string
+  attachment_ids?: string[]
+}
+
+export interface UserSearchResult {
+  id: string
+  username: string
+}
+
 export type NotificationType = 'reminder_due' | 'overdue' | 'ai_coach'
 
 export interface Notification {

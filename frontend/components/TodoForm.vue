@@ -258,6 +258,8 @@
                 <p class="text-sm text-red-700 dark:text-red-400">{{ errors.general }}</p>
               </div>
 
+              <CommentsSection v-if="isEditing && props.todo" :key="props.todo.id" :todo-id="props.todo.id" />
+
               <div class="flex gap-3 justify-end">
                 <button type="button" class="btn-secondary" :disabled="submitting" @click="handleCancel">Cancel</button>
                 <button type="submit" class="btn-primary flex items-center gap-2" :disabled="submitting">
@@ -281,6 +283,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useVoiceInput } from '~/composables/useVoiceInput'
 import { todosApi, aiApi } from '~/utils/api'
 import type { Folder, Subtask, Todo, TodoCreate, TodoUpdate } from '~/types'
+import CommentsSection from './CommentsSection.vue'
 
 interface Props {
   visible: boolean

@@ -11,6 +11,11 @@ import type {
   FolderCreate,
   FolderStats,
   FolderUpdate,
+  Attachment,
+  Comment,
+  CommentCreate,
+  CommentUpdate,
+  UserSearchResult,
 } from '~/types'
 
 const BASE_URL = 'http://localhost:8000/api'
@@ -192,6 +197,44 @@ export const foldersApi = {
 
   delete(id: string) {
     return apiFetch<void>(`/folders/${id}`, { method: 'DELETE' })
+  },
+}
+
+// Comments API
+export const commentsApi = {
+  list(todoId: string) {
+    return apiFetch<Comment[]>(`/todos/${todoId}/comments`)
+  },
+
+  create(todoId: string, data: CommentCreate) {
+    return apiFetch<Comment>(`/todos/${todoId}/comments`, { method: 'POST', body: data })
+  },
+
+  update(todoId: string, commentId: string, data: CommentUpdate) {
+    return apiFetch<Comment>(`/todos/${todoId}/comments/${commentId}`, { method: 'PUT', body: data })
+  },
+
+  delete(todoId: string, commentId: string) {
+    return apiFetch<void>(`/todos/${todoId}/comments/${commentId}`, { method: 'DELETE' })
+  },
+
+  uploadAttachment(file: File) {
+    const fd = new FormData()
+    fd.append('file', file)
+    return $fetch<Attachment>('/comment-attachments', {
+      baseURL: BASE_URL,
+      method: 'POST',
+      body: fd,
+      credentials: 'include',
+    })
+  },
+
+  deleteAttachment(attachmentId: string) {
+    return apiFetch<void>(`/comment-attachments/${attachmentId}`, { method: 'DELETE' })
+  },
+
+  searchUsers(q: string) {
+    return apiFetch<UserSearchResult[]>('/users/search', { params: { q } })
   },
 }
 

@@ -17,10 +17,13 @@ from exceptions import (
     validation_error_handler,
 )
 from routers.ai import router as ai_router
+from routers.attachments import router as attachments_router
 from routers.auth import router as auth_router
+from routers.comments import router as comments_router
 from routers.folders import router as folders_router
 from routers.notifications import router as notifications_router
 from routers.todos import router as todos_router
+from routers.users import router as users_router
 
 app = FastAPI(title="Todo App API", version="1.0.0")
 
@@ -42,9 +45,12 @@ app.add_exception_handler(NotFoundError, not_found_error_handler)
 # Include routers
 app.include_router(auth_router)
 app.include_router(todos_router)
+app.include_router(comments_router)
+app.include_router(attachments_router)
 app.include_router(folders_router)
 app.include_router(notifications_router)
 app.include_router(ai_router)
+app.include_router(users_router)
 
 # Serve uploaded images
 UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "data", "uploads")
