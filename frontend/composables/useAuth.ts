@@ -249,10 +249,28 @@ export function useAuth() {
     try {
       const result = await authApi.me()
       user.value = result
+      const authUser = useState<User | null>('auth-user')
+      authUser.value = result
       return true
     } catch {
       user.value = null
       return false
+    }
+  }
+
+  async function updatePreferences(payload: { email_reminders_enabled: boolean }): Promise<boolean> {
+    loading.value = true
+    try {
+      const result = await authApi.updateMe(payload)
+      user.value = result
+      const authUser = useState<User | null>('auth-user')
+      authUser.value = result
+      return true
+    } catch (error: any) {
+      handleServerError(error)
+      return false
+    } finally {
+      loading.value = false
     }
   }
 
@@ -279,5 +297,6 @@ export function useAuth() {
     register,
     logout,
     fetchUser,
+    updatePreferences,
   }
 }

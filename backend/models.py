@@ -17,6 +17,7 @@ class User(BaseModel):
     username: str  # 3-30 chars, alphanumeric + underscore
     password_hash: str  # bcrypt hash
     created_at: datetime  # ISO 8601 timestamp
+    email_reminders_enabled: bool = True  # User opt-out for reminder emails
 
 
 class UserCreate(BaseModel):
@@ -35,6 +36,13 @@ class UserResponse(BaseModel):
     email: str
     username: str
     created_at: datetime
+    email_reminders_enabled: bool = True
+
+
+class UserPreferencesUpdate(BaseModel):
+    """Request body for updating user preferences via PUT /api/auth/me."""
+
+    email_reminders_enabled: bool
 
 
 # --- Enums ---
@@ -87,6 +95,8 @@ class Todo(BaseModel):
     priority: Priority = Priority.MEDIUM
     due_date: str | None = None  # ISO 8601 date (YYYY-MM-DD) or None
     reminder_at: datetime | None = None  # ISO 8601 datetime for reminder trigger
+    reminder_sent: bool = False  # True once dispatched (or skipped)
+    reminder_sent_at: datetime | None = None  # When the email was dispatched / skipped
     status: Status = Status.PENDING
     folder_id: str | None = None  # Optional grouping under a Folder
     tags: list[str] = Field(default_factory=list)  # User-defined labels

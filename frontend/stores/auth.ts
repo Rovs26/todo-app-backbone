@@ -84,6 +84,21 @@ export const useAuthStore = defineStore('auth', {
         this.loading = false
       }
     },
+
+    async updatePreferences(payload: { email_reminders_enabled: boolean }) {
+      this.loading = true
+      this.error = null
+
+      try {
+        const user = await authApi.updateMe(payload)
+        this.user = user
+      } catch (err: any) {
+        this.error = extractErrorMessage(err)
+        throw err
+      } finally {
+        this.loading = false
+      }
+    },
   },
 })
 

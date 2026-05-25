@@ -157,3 +157,24 @@ class AuthService:
         if not user_data:
             return None
         return User(**user_data)
+
+    def update_preferences(self, user_id: str, *, email_reminders_enabled: bool) -> User:
+        """Update a user's preferences (currently just the email-reminders toggle).
+
+        Args:
+            user_id: ID of the user to update.
+            email_reminders_enabled: New value for the opt-in/out flag.
+
+        Returns:
+            The updated User.
+
+        Raises:
+            UnauthorizedError: If the user no longer exists (treated as session-gone).
+        """
+        existing = self.user_store.find_by_id(user_id)
+        if not existing:
+            raise UnauthorizedError("User not found")
+        self.user_store.update(
+            user_id, {"email_reminders_enabled": bool(email_reminders_enabled)}
+        )
+        return self.get_user_by_id(user_id)  # type: ignore[return-value]

@@ -325,6 +325,12 @@ class TodoService:
             else:
                 parsed_reminder = self._validate_reminder_at(data.reminder_at)
                 updates["reminder_at"] = parsed_reminder.isoformat()
+            # Reset dispatch state so the new (or cleared) reminder can fire.
+            old_value = record.get("reminder_at")
+            new_value = updates["reminder_at"]
+            if old_value != new_value:
+                updates["reminder_sent"] = False
+                updates["reminder_sent_at"] = None
 
         if data.status is not None:
             updates["status"] = data.status.value

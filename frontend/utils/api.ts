@@ -77,6 +77,10 @@ export const authApi = {
   me(headers?: Record<string, string>) {
     return apiFetch<User>('/auth/me', { headers })
   },
+
+  updateMe(data: { email_reminders_enabled: boolean }) {
+    return apiFetch<User>('/auth/me', { method: 'PUT', body: data })
+  },
 }
 
 // Todos API

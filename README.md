@@ -101,6 +101,27 @@ todo-app/
 | POST | `/api/auth/login` | Log in with email/username and password |
 | POST | `/api/auth/logout` | Log out (clears cookie) |
 | GET | `/api/auth/me` | Get current user info |
+| PUT | `/api/auth/me` | Update user preferences (e.g. `email_reminders_enabled`) |
+
+### Email reminders (environment variables)
+
+The reminder scheduler runs in-process and polls `todos.json` every 60s for
+todos whose `reminder_at` has passed. If `SMTP_*` is fully configured it uses
+SMTP; otherwise it appends to `backend/data/email_log.jsonl` (dev mode).
+
+| Variable | Default | Description |
+|---|---|---|
+| `SMTP_HOST` | _(empty)_ | SMTP server host |
+| `SMTP_PORT` | _(empty)_ | SMTP server port (465 for SSL, 587 for STARTTLS) |
+| `SMTP_USER` | _(empty)_ | SMTP username |
+| `SMTP_PASS` | _(empty)_ | SMTP password |
+| `SMTP_FROM` | _(empty)_ | From address used in outgoing reminders |
+| `SMTP_MODE` | `ssl` | `ssl`, `starttls`, or `none` |
+| `REMINDER_RATE_LIMIT_PER_MINUTE` | `100` | Max reminders dispatched per rolling 60s window |
+| `FRONTEND_URL` | `http://localhost:3000` | Link target embedded in the email body |
+
+If any of `SMTP_HOST/PORT/USER/PASS/FROM` is missing or empty the service
+falls back to the file-log backend (no emails are sent).
 
 ### Todos
 

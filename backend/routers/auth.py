@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field
 
 from dependencies import auth_service, get_current_user
-from models import User, UserCreate, UserResponse
+from models import User, UserCreate, UserPreferencesUpdate, UserResponse
 
 
 class LoginRequest(BaseModel):
@@ -68,6 +68,7 @@ async def register(user_data: UserCreate, response: Response) -> UserResponse:
         email=user.email,
         username=user.username,
         created_at=user.created_at,
+        email_reminders_enabled=user.email_reminders_enabled,
     )
 
 
@@ -96,6 +97,7 @@ async def login(login_data: LoginRequest, response: Response) -> UserResponse:
         email=user.email,
         username=user.username,
         created_at=user.created_at,
+        email_reminders_enabled=user.email_reminders_enabled,
     )
 
 
@@ -139,4 +141,27 @@ async def get_me(current_user: User = Depends(get_current_user)) -> UserResponse
         email=current_user.email,
         username=current_user.username,
         created_at=current_user.created_at,
+        email_reminders_enabled=current_user.email_reminders_enabled,
+    )
+
+
+@router.put("/me", response_model=UserResponse)
+async def update_me(
+    prefs: UserPreferencesUpdate,
+    current_user: User = Depends(get_current_user),
+) -> UserResponse:
+    """Update the authenticated user's preferences.
+
+    Currently only ``email_reminders_enabled`` is exposed for update.
+    Email and username are intentionally not updatable here.
+    """
+    updated = auth_service.update_preferences(
+        current_user.id, email_reminders_enabled=prefs.email_reminders_enabled
+    )
+    return UserResponse(
+        id=updated.id,
+        email=updated.email,
+        username=updated.username,
+        created_at=updated.created_at,
+        email_reminders_enabled=updated.email_reminders_enabled,
     )
