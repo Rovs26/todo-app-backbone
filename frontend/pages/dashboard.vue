@@ -480,7 +480,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useTodos } from '~/composables/useTodos'
 import { useAuth } from '~/composables/useAuth'
 import { useToast } from '~/composables/useToast'
@@ -742,7 +742,7 @@ async function onVoiceApply() {
   }
 }
 
-function onQuickAddParsed(data: any, source: 'openai' | 'local') {
+async function onQuickAddParsed(data: any, source: 'openai' | 'local') {
   // Normalize subtasks (server may send array of strings)
   const subtasks = Array.isArray(data?.subtasks)
     ? data.subtasks
@@ -762,6 +762,9 @@ function onQuickAddParsed(data: any, source: 'openai' | 'local') {
   }
   quickAddSource.value = source
   editingTodo.value = null
+  // Toggle visibility so the watcher always fires (re-hydrates form state).
+  showForm.value = false
+  await nextTick()
   showForm.value = true
 }
 

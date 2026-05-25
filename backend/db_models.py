@@ -139,7 +139,7 @@ class FolderRow(Base):
 _TODO_SCALAR_FIELDS = {
     "id", "user_id", "title", "description", "priority", "due_date",
     "reminder_at", "reminder_sent", "reminder_sent_at", "status",
-    "folder_id", "image_url", "position", "time_spent_seconds",
+    "folder_id", "image_url", "location", "position", "time_spent_seconds",
     "recurrence", "recurrence_until", "recurrence_count",
     "recurrence_series_id", "recurrence_index", "created_at", "updated_at",
 }
@@ -167,6 +167,7 @@ class TodoRow(Base):
     status: Mapped[str] = mapped_column(String, default="pending", nullable=False)
     folder_id: Mapped[str | None] = mapped_column(String, nullable=True)
     image_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    location: Mapped[str | None] = mapped_column(Text, nullable=True)
     position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     time_spent_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     recurrence: Mapped[str] = mapped_column(String, default="none", nullable=False)
@@ -197,6 +198,7 @@ class TodoRow(Base):
             "status": self.status,
             "folder_id": self.folder_id,
             "image_url": self.image_url,
+            "location": self.location,
             "position": int(self.position or 0),
             "time_spent_seconds": int(self.time_spent_seconds or 0),
             "recurrence": self.recurrence or "none",

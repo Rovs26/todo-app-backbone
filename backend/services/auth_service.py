@@ -13,7 +13,7 @@ from store import JSONStore
 # JWT configuration
 SECRET_KEY = "todo-app-secret-key-change-in-production"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = 24
+ACCESS_TOKEN_EXPIRE_HOURS = 7 * 24  # 7 days
 
 
 class AuthService:

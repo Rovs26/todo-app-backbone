@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # Cookie configuration
 COOKIE_NAME = "token"
-COOKIE_MAX_AGE = 24 * 60 * 60  # 24 hours in seconds
+COOKIE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
 
 
 def _set_auth_cookie(response: Response, token: str) -> None:

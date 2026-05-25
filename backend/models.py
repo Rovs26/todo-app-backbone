@@ -102,6 +102,7 @@ class Todo(BaseModel):
     tags: list[str] = Field(default_factory=list)  # User-defined labels
     subtasks: list[Subtask] = Field(default_factory=list)
     image_url: str | None = None  # Server-relative URL (set by upload endpoint)
+    location: str | None = None  # Optional place / address for "where"
     position: int = 0  # User-defined ordering (lower first)
     time_spent_seconds: int = 0  # Pomodoro / focus time accumulator
     comments: list["Comment"] = Field(default_factory=list)
@@ -203,6 +204,7 @@ class TodoCreate(BaseModel):
     recurrence: Recurrence | None = None
     recurrence_until: str | None = None
     recurrence_count: int | None = None
+    location: str | None = None
 
 
 class TodoUpdate(BaseModel):
@@ -221,6 +223,7 @@ class TodoUpdate(BaseModel):
     recurrence: Recurrence | None = None
     recurrence_until: str | None = None
     recurrence_count: int | None = None
+    location: str | None = None
 
 
 class TodoStats(BaseModel):

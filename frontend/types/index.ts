@@ -54,6 +54,7 @@ export interface Todo {
   recurrence_count: number | null
   recurrence_series_id: string | null
   recurrence_index: number
+  location: string | null
   created_at: string
   updated_at: string | null
 }
@@ -74,10 +75,10 @@ export interface StreakStats {
 }
 
 export type TodoCreate = Pick<Todo, 'title'> &
-  Partial<Pick<Todo, 'description' | 'priority' | 'due_date' | 'reminder_at' | 'status' | 'folder_id' | 'tags' | 'subtasks' | 'recurrence' | 'recurrence_until' | 'recurrence_count'>>
+  Partial<Pick<Todo, 'description' | 'priority' | 'due_date' | 'reminder_at' | 'status' | 'folder_id' | 'tags' | 'subtasks' | 'recurrence' | 'recurrence_until' | 'recurrence_count' | 'location'>>
 
 export type TodoUpdate = Partial<
-  Pick<Todo, 'title' | 'description' | 'priority' | 'due_date' | 'reminder_at' | 'status' | 'folder_id' | 'tags' | 'subtasks' | 'position' | 'recurrence' | 'recurrence_until' | 'recurrence_count'>
+  Pick<Todo, 'title' | 'description' | 'priority' | 'due_date' | 'reminder_at' | 'status' | 'folder_id' | 'tags' | 'subtasks' | 'position' | 'recurrence' | 'recurrence_until' | 'recurrence_count' | 'location'>
 >
 
 export interface TagInfo {

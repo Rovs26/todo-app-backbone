@@ -107,6 +107,42 @@
                 <p v-if="errors.description" class="mt-1.5 text-sm text-red-600 dark:text-red-400" role="alert">{{ errors.description }}</p>
               </div>
 
+              <!-- Location / Where -->
+              <div class="mb-4">
+                <label for="todo-location" class="block text-sm font-medium text-secondary-700 dark:text-secondary-300 mb-1.5">
+                  Where <span class="font-normal text-secondary-400">(optional)</span>
+                </label>
+                <div class="relative">
+                  <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-secondary-400">📍</span>
+                  <input
+                    id="todo-location"
+                    v-model="form.location"
+                    type="text"
+                    class="input-field pl-8"
+                    placeholder="Search or type a place…"
+                    maxlength="200"
+                    :disabled="submitting"
+                    @input="onLocationInput"
+                    @blur="hideSuggestions"
+                    autocomplete="off"
+                  />
+                </div>
+                <!-- Nominatim suggestions -->
+                <ul
+                  v-if="locationSuggestions.length > 0 && showLocationDropdown"
+                  class="mt-1 border border-secondary-200 dark:border-secondary-700 rounded-lg bg-white dark:bg-secondary-800 shadow-lg overflow-hidden z-10 relative"
+                >
+                  <li
+                    v-for="s in locationSuggestions"
+                    :key="s.place_id"
+                    class="px-3 py-2 text-sm text-secondary-700 dark:text-secondary-300 hover:bg-secondary-100 dark:hover:bg-secondary-700 cursor-pointer truncate"
+                    @mousedown.prevent="pickLocation(s)"
+                  >
+                    {{ s.display_name }}
+                  </li>
+                </ul>
+              </div>
+
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                 <div>
                   <label for="todo-folder" class="block text-sm font-medium text-secondary-700 dark:text-secondary-300 mb-1.5">Folder</label>
@@ -248,7 +284,7 @@
               <div class="mb-4 rounded-md border border-secondary-200 dark:border-secondary-700 p-3">
                 <div class="flex items-center gap-2 mb-2">
                   <label class="text-sm font-medium text-secondary-700 dark:text-secondary-300">🔁 Repeats</label>
-                  <select v-model="form.recurrence" class="text-sm bg-white dark:bg-secondary-800 border border-secondary-300 dark:border-secondary-700 rounded px-2 py-1">
+                  <select v-model="form.recurrence" class="text-sm bg-white dark:bg-secondary-800 dark:text-white border border-secondary-300 dark:border-secondary-700 rounded px-2 py-1">
                     <option value="none">None</option>
                     <option value="daily">Daily</option>
                     <option value="weekly">Weekly</option>
@@ -257,13 +293,13 @@
                   </select>
                 </div>
                 <div v-if="form.recurrence !== 'none'" class="flex flex-wrap gap-3 text-xs">
-                  <label class="flex items-center gap-1">
+                  <label class="flex items-center gap-1 text-secondary-700 dark:text-secondary-300">
                     Ends on
-                    <input type="date" v-model="form.recurrence_until" :disabled="!!form.recurrence_count" class="text-xs border border-secondary-300 dark:border-secondary-700 rounded px-1 bg-white dark:bg-secondary-800" />
+                    <input type="date" v-model="form.recurrence_until" :disabled="!!form.recurrence_count" class="text-xs border border-secondary-300 dark:border-secondary-700 rounded px-1 bg-white dark:bg-secondary-800 dark:text-white" />
                   </label>
-                  <label class="flex items-center gap-1">
+                  <label class="flex items-center gap-1 text-secondary-700 dark:text-secondary-300">
                     After N times
-                    <input type="number" min="1" max="1000" v-model.number="form.recurrence_count" :disabled="!!form.recurrence_until" class="w-20 text-xs border border-secondary-300 dark:border-secondary-700 rounded px-1 bg-white dark:bg-secondary-800" />
+                    <input type="number" min="1" max="1000" v-model.number="form.recurrence_count" :disabled="!!form.recurrence_until" class="w-20 text-xs border border-secondary-300 dark:border-secondary-700 rounded px-1 bg-white dark:bg-secondary-800 dark:text-white" />
                   </label>
                 </div>
                 <div v-if="isEditing && (props.todo?.recurrence && props.todo.recurrence !== 'none')" class="mt-2 text-xs">
@@ -359,6 +395,7 @@ const form = reactive({
   recurrence: 'none' as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly',
   recurrence_until: '',
   recurrence_count: null as number | null,
+  location: '',
 })
 
 const applyTo = ref<'occurrence' | 'series'>('occurrence')
@@ -380,6 +417,40 @@ const removeImageFlag = ref(false)
 const aiAvailable = ref(false)
 const suggesting = ref(false)
 const voice = useVoiceInput()
+
+// Location search
+interface NominatimResult { place_id: string; display_name: string }
+const locationSuggestions = ref<NominatimResult[]>([])
+const showLocationDropdown = ref(false)
+let locationDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+async function onLocationInput() {
+  const q = form.location.trim()
+  if (locationDebounceTimer) clearTimeout(locationDebounceTimer)
+  if (q.length < 3) { locationSuggestions.value = []; showLocationDropdown.value = false; return }
+  locationDebounceTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5`,
+        { headers: { 'Accept-Language': 'en' } },
+      )
+      if (res.ok) {
+        locationSuggestions.value = await res.json()
+        showLocationDropdown.value = locationSuggestions.value.length > 0
+      }
+    } catch { /* ignore */ }
+  }, 500)
+}
+
+function pickLocation(s: NominatimResult) {
+  form.location = s.display_name
+  locationSuggestions.value = []
+  showLocationDropdown.value = false
+}
+
+function hideSuggestions() {
+  setTimeout(() => { showLocationDropdown.value = false }, 150)
+}
 
 const suggestionPool = computed(() =>
   (props.tagSuggestions || []).filter((s) => !form.tags.includes(s)).slice(0, 6),
@@ -420,6 +491,10 @@ function hydrateFromProps() {
   imageFile.value = null
   imagePreview.value = null
   removeImageFlag.value = false
+  tagDraft.value = ''
+  subtaskDraft.value = ''
+  locationSuggestions.value = []
+  showLocationDropdown.value = false
   if (props.todo) {
     form.title = props.todo.title
     form.description = props.todo.description ?? ''
@@ -433,6 +508,7 @@ function hydrateFromProps() {
     form.recurrence = (props.todo.recurrence || 'none') as any
     form.recurrence_until = props.todo.recurrence_until ?? ''
     form.recurrence_count = props.todo.recurrence_count ?? null
+    form.location = (props.todo as any).location ?? ''
     if (props.todo.image_url) {
       imagePreview.value = resolveImageUrl(props.todo.image_url)
     }
@@ -456,6 +532,7 @@ function hydrateFromProps() {
     form.recurrence = ((p.recurrence as any) || 'none')
     form.recurrence_until = (p.recurrence_until as string) ?? ''
     form.recurrence_count = (p.recurrence_count as number | null) ?? null
+    form.location = (p.location as string) ?? ''
   }
   applyTo.value = 'occurrence'
 }
@@ -635,6 +712,9 @@ function handleSubmit() {
     const newCount = form.recurrence_count ?? null
     if (newCount !== (todo.recurrence_count ?? null)) data.recurrence_count = newCount as any
 
+    const newLoc = form.location.trim() || null
+    if (newLoc !== ((todo as any).location ?? null)) (data as any).location = newLoc
+
     ;(data as any)._applyTo = applyTo.value
     emit('submit', data)
   } else {
@@ -657,6 +737,8 @@ function handleSubmit() {
       if (form.recurrence_until) data.recurrence_until = form.recurrence_until
       if (form.recurrence_count) data.recurrence_count = form.recurrence_count
     }
+    const loc = form.location.trim()
+    if (loc) (data as any).location = loc
     emit('submit', data)
   }
   submitting.value = false

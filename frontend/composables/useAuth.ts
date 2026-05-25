@@ -2,6 +2,16 @@ import { ref, reactive, computed } from 'vue'
 import { authApi } from '~/utils/api'
 import type { User } from '~/types'
 
+const AUTH_CACHE_KEY = 'todo-app-auth-user'
+
+function writeAuthCache(u: User | null) {
+  if (typeof window === 'undefined') return
+  try {
+    if (u) window.localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(u))
+    else window.localStorage.removeItem(AUTH_CACHE_KEY)
+  } catch { /* ignore */ }
+}
+
 interface ValidationErrors {
   email?: string
   username?: string
@@ -191,6 +201,7 @@ export function useAuth() {
       // Update global auth state so middleware recognizes the user
       const authUser = useState<User | null>('auth-user')
       authUser.value = result
+      writeAuthCache(result)
       return true
     } catch (error: any) {
       handleServerError(error)
@@ -219,6 +230,7 @@ export function useAuth() {
       // Update global auth state so middleware recognizes the user
       const authUser = useState<User | null>('auth-user')
       authUser.value = result
+      writeAuthCache(result)
       return true
     } catch (error: any) {
       handleServerError(error)
@@ -236,6 +248,7 @@ export function useAuth() {
       // Clear global auth state so middleware redirects to login
       const authUser = useState<User | null>('auth-user')
       authUser.value = null
+      writeAuthCache(null)
       return true
     } catch (error: any) {
       handleServerError(error)
@@ -251,9 +264,11 @@ export function useAuth() {
       user.value = result
       const authUser = useState<User | null>('auth-user')
       authUser.value = result
+      writeAuthCache(result)
       return true
     } catch {
       user.value = null
+      writeAuthCache(null)
       return false
     }
   }
@@ -265,6 +280,7 @@ export function useAuth() {
       user.value = result
       const authUser = useState<User | null>('auth-user')
       authUser.value = result
+      writeAuthCache(result)
       return true
     } catch (error: any) {
       handleServerError(error)

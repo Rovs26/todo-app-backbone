@@ -84,12 +84,51 @@
 
             <!-- Step 2: review extracted items -->
             <div v-if="items.length > 0 && !uploading">
+              <!-- Mode toggle -->
+              <div class="flex rounded-lg border border-secondary-200 dark:border-secondary-700 overflow-hidden mb-3 text-xs">
+                <button
+                  type="button"
+                  class="flex-1 px-3 py-1.5 font-medium transition-colors"
+                  :class="importMode === 'individual' ? 'bg-primary-600 text-white' : 'text-secondary-600 dark:text-secondary-300 hover:bg-secondary-100 dark:hover:bg-secondary-700'"
+                  @click="importMode = 'individual'"
+                >
+                  Individual todos
+                </button>
+                <button
+                  type="button"
+                  class="flex-1 px-3 py-1.5 font-medium transition-colors border-l border-secondary-200 dark:border-secondary-700"
+                  :class="importMode === 'single' ? 'bg-primary-600 text-white' : 'text-secondary-600 dark:text-secondary-300 hover:bg-secondary-100 dark:hover:bg-secondary-700'"
+                  @click="importMode = 'single'"
+                >
+                  One todo + subtasks
+                </button>
+              </div>
+
+              <!-- Single-todo mode: parent title input -->
+              <div v-if="importMode === 'single'" class="mb-3">
+                <label class="block text-xs text-secondary-600 dark:text-secondary-400 mb-1">
+                  Todo title
+                </label>
+                <input
+                  v-model="singleTitle"
+                  type="text"
+                  class="input-field text-sm"
+                  maxlength="200"
+                  placeholder="e.g. Grocery shopping"
+                />
+              </div>
+
               <div class="flex items-center justify-between mb-3">
                 <p class="text-sm text-secondary-700 dark:text-secondary-300">
-                  Found <strong>{{ items.length }}</strong> item{{ items.length === 1 ? '' : 's' }}.
-                  Review and choose which to create.
+                  <template v-if="importMode === 'individual'">
+                    Found <strong>{{ items.length }}</strong> item{{ items.length === 1 ? '' : 's' }}.
+                    Review and choose which to create.
+                  </template>
+                  <template v-else>
+                    <strong>{{ items.length }}</strong> item{{ items.length === 1 ? '' : 's' }} will become subtasks.
+                  </template>
                 </p>
-                <div class="flex items-center gap-2 text-xs">
+                <div v-if="importMode === 'individual'" class="flex items-center gap-2 text-xs">
                   <button type="button" class="text-primary-600 hover:underline" @click="selectAll">All</button>
                   <span class="text-secondary-400">·</span>
                   <button type="button" class="text-primary-600 hover:underline" @click="selectNone">None</button>
@@ -98,7 +137,7 @@
 
               <div class="mb-3">
                 <label class="block text-xs text-secondary-600 dark:text-secondary-400 mb-1">
-                  Target folder (applied to all)
+                  Target folder
                 </label>
                 <select v-model="batchFolderId" class="input-field text-sm">
                   <option value="">(no folder)</option>
@@ -113,12 +152,14 @@
                   class="flex items-start gap-3 p-2 rounded border border-secondary-200 dark:border-secondary-700"
                 >
                   <input
+                    v-if="importMode === 'individual'"
                     type="checkbox"
                     class="mt-2 rounded text-primary-600 focus:ring-primary-500"
                     :checked="item._selected"
                     :aria-label="`Include ${item.title}`"
                     @change="item._selected = ($event.target as HTMLInputElement).checked"
                   />
+                  <span v-else class="mt-2 text-secondary-400 select-none">•</span>
                   <div class="flex-1 min-w-0 space-y-1">
                     <input
                       v-model="item.title"
@@ -126,8 +167,8 @@
                       class="input-field text-sm"
                       maxlength="200"
                     />
-                    <div class="flex items-center gap-2 text-xs">
-                      <select v-model="item.priority" class="text-xs border border-secondary-300 dark:border-secondary-700 rounded px-1.5 py-0.5 bg-white dark:bg-secondary-800">
+                    <div v-if="importMode === 'individual'" class="flex items-center gap-2 text-xs">
+                      <select v-model="item.priority" class="text-xs border border-secondary-300 dark:border-secondary-700 rounded px-1.5 py-0.5 bg-white dark:bg-secondary-800 dark:text-white">
                         <option value="low">Low</option>
                         <option value="medium">Medium</option>
                         <option value="high">High</option>
@@ -135,7 +176,7 @@
                       <input
                         v-model="item.due_date"
                         type="date"
-                        class="text-xs border border-secondary-300 dark:border-secondary-700 rounded px-1.5 py-0.5 bg-white dark:bg-secondary-800"
+                        class="text-xs border border-secondary-300 dark:border-secondary-700 rounded px-1.5 py-0.5 bg-white dark:bg-secondary-800 dark:text-white"
                       />
                       <span v-if="item.tags && item.tags.length" class="text-secondary-500 truncate">
                         #{{ item.tags.join(' #') }}
@@ -160,10 +201,11 @@
               v-if="items.length > 0"
               type="button"
               class="btn-primary text-sm"
-              :disabled="creating || selectedCount === 0"
+              :disabled="creating || (importMode === 'individual' && selectedCount === 0) || (importMode === 'single' && !singleTitle.trim())"
               @click="createSelected"
             >
               <span v-if="creating">Creating…</span>
+              <span v-else-if="importMode === 'single'">Create todo with {{ items.length }} subtask{{ items.length === 1 ? '' : 's' }}</span>
               <span v-else>Create {{ selectedCount }} todo{{ selectedCount === 1 ? '' : 's' }}</span>
             </button>
           </footer>
@@ -202,6 +244,8 @@ const uploading = ref(false)
 const creating = ref(false)
 const items = ref<DialogItem[]>([])
 const batchFolderId = ref<string>('')
+const importMode = ref<'individual' | 'single'>('individual')
+const singleTitle = ref('')
 
 const selectedCount = computed(() => items.value.filter((i) => i._selected).length)
 
@@ -214,6 +258,8 @@ watch(
       uploading.value = false
       creating.value = false
       batchFolderId.value = props.defaultFolderId ?? ''
+      importMode.value = 'individual'
+      singleTitle.value = ''
     }
   },
 )
@@ -250,6 +296,9 @@ async function upload(file: File) {
     }))
     if (items.value.length === 0) {
       toastError('No todos found in that image.')
+    } else if (!singleTitle.value) {
+      // Auto-suggest a parent title from the first item when switching to single mode
+      singleTitle.value = items.value[0]?.title?.slice(0, 60) || ''
     }
   } catch (err: any) {
     const status = err?.response?.status || err?.statusCode
@@ -275,11 +324,32 @@ function selectNone() {
 }
 
 async function createSelected() {
-  const chosen = items.value.filter((i) => i._selected)
-  if (chosen.length === 0) return
   creating.value = true
-
   const folderId = batchFolderId.value || null
+
+  if (importMode.value === 'single') {
+    const title = singleTitle.value.trim().slice(0, 200) || 'Imported list'
+    const subtasks = items.value.map((it, idx) => ({
+      id: `sub-${Date.now()}-${idx}`,
+      title: it.title.trim().slice(0, 200) || 'Item',
+      done: false,
+    }))
+    try {
+      await todosApi.create({ title, folder_id: folderId, subtasks })
+      toastSuccess(`Created 1 todo with ${subtasks.length} subtask${subtasks.length === 1 ? '' : 's'}.`)
+      emit('created')
+      emit('update:modelValue', false)
+    } catch {
+      toastError('Failed to create todo.')
+    } finally {
+      creating.value = false
+    }
+    return
+  }
+
+  const chosen = items.value.filter((i) => i._selected)
+  if (chosen.length === 0) { creating.value = false; return }
+
   const results = await Promise.allSettled(
     chosen.map((it) => {
       const payload: TodoCreate = {
@@ -304,11 +374,9 @@ async function createSelected() {
     emit('created')
     emit('update:modelValue', false)
   } else {
-    // Keep the dialog open with only the failed rows still selected.
     const failedIds = new Set(failed.map((idx) => chosen[idx]))
     items.value.forEach((it) => (it._selected = failedIds.has(it)))
     toastError(`${failed.length} of ${chosen.length} todos failed to create. Try again.`)
-    // Still notify parent that some were created, so the list refreshes.
     if (failed.length < chosen.length) emit('created')
   }
 }

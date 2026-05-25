@@ -109,13 +109,40 @@
               <label class="block text-sm font-medium text-secondary-700 dark:text-secondary-300 mt-3 mb-1.5">
                 Icon (emoji)
               </label>
-              <input
-                v-model="form.icon"
-                type="text"
-                class="input-field"
-                placeholder="📚"
-                maxlength="4"
-              />
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  class="w-10 h-10 text-xl flex items-center justify-center rounded-lg border border-secondary-300 dark:border-secondary-600 bg-white dark:bg-secondary-700 hover:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  :title="form.icon || 'Choose emoji'"
+                  @click="showEmojiPicker = !showEmojiPicker"
+                >{{ form.icon || '➕' }}</button>
+                <input
+                  v-model="form.icon"
+                  type="text"
+                  class="input-field flex-1"
+                  placeholder="or type one…"
+                  maxlength="4"
+                  @focus="showEmojiPicker = false"
+                />
+                <button
+                  v-if="form.icon"
+                  type="button"
+                  class="text-secondary-400 hover:text-secondary-600 dark:hover:text-secondary-200 text-xs"
+                  title="Clear icon"
+                  @click="form.icon = ''"
+                >✕</button>
+              </div>
+              <!-- Emoji grid picker -->
+              <div v-if="showEmojiPicker" class="mt-2 p-2 rounded-lg border border-secondary-200 dark:border-secondary-600 bg-white dark:bg-secondary-800 grid grid-cols-8 gap-1">
+                <button
+                  v-for="e in emojiChoices"
+                  :key="e"
+                  type="button"
+                  class="w-8 h-8 text-lg flex items-center justify-center rounded hover:bg-secondary-100 dark:hover:bg-secondary-700 transition-colors"
+                  :class="form.icon === e ? 'bg-primary-100 dark:bg-primary-900/30 ring-1 ring-primary-400' : ''"
+                  @click="form.icon = e; showEmojiPicker = false"
+                >{{ e }}</button>
+              </div>
 
               <label class="block text-sm font-medium text-secondary-700 dark:text-secondary-300 mt-3 mb-1.5">
                 Color
@@ -196,6 +223,15 @@ const dialogOpen = ref(false)
 const editing = ref<Folder | null>(null)
 const saving = ref(false)
 const dialogError = ref<string | null>(null)
+const showEmojiPicker = ref(false)
+
+const emojiChoices = [
+  '📁','📂','📚','📖','📝','📋','📌','📍',
+  '🏠','🏢','💼','🎯','✅','🔔','⭐','❤️',
+  '🛒','🍽️','🏋️','🎵','🎮','💻','📱','🚗',
+  '✈️','🌍','💰','🎁','🔑','⚙️','🩺','📅',
+  '🌱','🌿','🔬','🎓','💡','🔧','🏆','🎨',
+]
 const form = reactive({
   name: '',
   icon: '' as string | null,
@@ -235,6 +271,7 @@ function openEdit(folder: Folder) {
 function closeDialog() {
   dialogOpen.value = false
   editing.value = null
+  showEmojiPicker.value = false
 }
 
 async function save() {

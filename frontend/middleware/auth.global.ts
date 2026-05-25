@@ -1,21 +1,43 @@
 import { authApi } from '~/utils/api'
 import type { User } from '~/types'
 
+const AUTH_CACHE_KEY = 'todo-app-auth-user'
+
+function readCachedUser(): User | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(AUTH_CACHE_KEY)
+    return raw ? (JSON.parse(raw) as User) : null
+  } catch {
+    return null
+  }
+}
+
+function writeCachedUser(u: User | null) {
+  if (typeof window === 'undefined') return
+  try {
+    if (u) window.localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(u))
+    else window.localStorage.removeItem(AUTH_CACHE_KEY)
+  } catch { /* ignore quota / disabled storage */ }
+}
+
 export default defineNuxtRouteMiddleware(async (to) => {
-  // Define route classifications
   const publicPages = ['/login', '/register']
   const protectedPages = ['/dashboard']
 
   const isPublicPage = publicPages.includes(to.path)
   const isProtectedPage = protectedPages.includes(to.path) || to.path.startsWith('/dashboard')
 
-  // Use useState to persist auth state across navigations
   const user = useState<User | null>('auth-user', () => null)
   const authChecked = useState<boolean>('auth-checked', () => false)
 
-  // Check auth state on initial load (only once).
-  // On the server we forward the incoming Cookie header so the JWT reaches
-  // the FastAPI backend; otherwise SSR refreshes always look unauthenticated.
+  // On the client, seed from localStorage immediately so a refresh shows the
+  // dashboard without a flash to /login while the backend round-trip runs.
+  if (!authChecked.value && import.meta.client && !user.value) {
+    const cached = readCachedUser()
+    if (cached) user.value = cached
+  }
+
   if (!authChecked.value) {
     try {
       const headers = import.meta.server
@@ -23,20 +45,21 @@ export default defineNuxtRouteMiddleware(async (to) => {
         : undefined
       const currentUser = await authApi.me(headers)
       user.value = currentUser
+      if (import.meta.client) writeCachedUser(currentUser)
     } catch {
+      // Backend rejected the cookie — clear both in-memory and cached user.
       user.value = null
+      if (import.meta.client) writeCachedUser(null)
     }
     authChecked.value = true
   }
 
   const isAuthenticated = !!user.value
 
-  // Redirect unauthenticated users from protected pages to login
   if (isProtectedPage && !isAuthenticated) {
     return navigateTo('/login')
   }
 
-  // Redirect authenticated users from login/register to dashboard
   if (isPublicPage && isAuthenticated) {
     return navigateTo('/dashboard')
   }

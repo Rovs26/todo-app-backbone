@@ -98,6 +98,15 @@
             {{ formattedDueDate }}
           </span>
 
+          <!-- Location -->
+          <span
+            v-if="(todo as any).location"
+            class="inline-flex items-center gap-1 text-xs text-secondary-500 dark:text-secondary-400 truncate max-w-[140px]"
+            :title="(todo as any).location"
+          >
+            📍 {{ (todo as any).location }}
+          </span>
+
           <!-- Reminder -->
           <span
             v-if="todo.reminder_at"

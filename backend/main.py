@@ -27,7 +27,10 @@ from routers.folders import router as folders_router
 from routers.notifications import router as notifications_router
 from routers.todos import router as todos_router
 from routers.users import router as users_router
+from pathlib import Path
+
 from dependencies import session_factory
+from scripts.migrate_json_to_sqlite import migrate as _migrate_json
 from services.email_service import build_email_service
 from services.reminder_scheduler import ReminderScheduler
 from store import SQLStore
@@ -40,6 +43,22 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Auto-migrate JSON→SQLite if the users table is empty and JSON files exist.
+    # This ensures dev data survives server restarts and git pulls.
+    try:
+        from db_models import UserRow
+        from db import make_session_factory
+        with make_session_factory(session_factory.kw["bind"])() as s:
+            user_count = s.query(UserRow).count()
+        if user_count == 0:
+            users_json = os.path.join(DATA_DIR, "users.json")
+            if os.path.exists(users_json):
+                log.info("Auto-migrating JSON data to SQLite…")
+                _migrate_json(Path(DATA_DIR), dry_run=False)
+                log.info("Auto-migration complete.")
+    except Exception as exc:
+        log.warning("Auto-migration skipped: %s", exc)
+
     # Startup: build email service + scheduler.
     # DB schema is created at import time by ``dependencies.init_db``.
     email_service = build_email_service(
