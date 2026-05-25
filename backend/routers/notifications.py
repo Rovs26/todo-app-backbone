@@ -8,14 +8,14 @@ import os
 
 from fastapi import APIRouter, Depends, Query, Response
 
-from dependencies import get_current_user
+from dependencies import get_current_user, session_factory
 from models import User
 from routers.todos import todo_store
 from services.notification_service import NotificationService
-from store import JSONStore
+from store import SQLStore
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-notification_store = JSONStore(os.path.join(DATA_DIR, "notifications.json"))
+notification_store = SQLStore(session_factory, os.path.join(DATA_DIR, "notifications.json"))
 notification_service = NotificationService(notification_store, todo_store)
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])

@@ -4,16 +4,16 @@ import os
 
 from fastapi import APIRouter, Depends, Response
 
-from dependencies import get_current_user, user_store
+from dependencies import get_current_user, session_factory, user_store
 from models import CommentCreate, CommentResponse, CommentUpdate, User
 from services.attachment_service import AttachmentService
 from services.auth_service import AuthService
 from services.comment_service import CommentService
-from store import JSONStore
+from store import SQLStore
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-todo_store = JSONStore(os.path.join(DATA_DIR, "todos.json"))
-attachment_store = JSONStore(os.path.join(DATA_DIR, "attachments.json"))
+todo_store = SQLStore(session_factory, os.path.join(DATA_DIR, "todos.json"))
+attachment_store = SQLStore(session_factory, os.path.join(DATA_DIR, "attachments.json"))
 attachment_uploads_dir = os.path.join(DATA_DIR, "uploads", "comments")
 attachment_service = AttachmentService(attachment_store, attachment_uploads_dir)
 auth_service = AuthService(user_store)

@@ -4,14 +4,14 @@ import os
 
 from fastapi import APIRouter, Depends, Query, Response
 
-from dependencies import get_current_user
+from dependencies import get_current_user, session_factory
 from models import Folder, FolderCreate, FolderUpdate, User
 from routers.todos import todo_store
 from services.folder_service import FolderService
-from store import JSONStore
+from store import SQLStore
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-folder_store = JSONStore(os.path.join(DATA_DIR, "folders.json"))
+folder_store = SQLStore(session_factory, os.path.join(DATA_DIR, "folders.json"))
 folder_service = FolderService(folder_store, todo_store)
 
 router = APIRouter(prefix="/api/folders", tags=["folders"])

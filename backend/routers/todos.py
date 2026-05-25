@@ -15,16 +15,16 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, Up
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
-from dependencies import get_current_user
+from dependencies import get_current_user, session_factory
 from models import StreakStats, Todo, TodoCreate, TodoStats, TodoUpdate, User
 from services import ai_service
 from services.streak_service import compute_streak
 from services.todo_service import TodoService
-from store import JSONStore
+from store import SQLStore
 
 # Initialize todo store and service
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-todo_store = JSONStore(os.path.join(DATA_DIR, "todos.json"))
+todo_store = SQLStore(session_factory, os.path.join(DATA_DIR, "todos.json"))
 todo_service = TodoService(todo_store)
 
 router = APIRouter(prefix="/api/todos", tags=["todos"])

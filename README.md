@@ -2,7 +2,7 @@
 
 A full-stack Todo application with user authentication, full CRUD operations, filtering/sorting, and a responsive dashboard UI.
 
-- **Backend**: Python FastAPI with JSON file-based storage and JWT authentication
+- **Backend**: Python FastAPI with SQLite (via SQLAlchemy) and JWT authentication
 - **Frontend**: Nuxt 3 with TailwindCSS and Pinia state management
 
 ## Prerequisites
@@ -67,11 +67,14 @@ todo-app/
 ├── backend/
 │   ├── main.py              # FastAPI application entry point
 │   ├── models.py            # Pydantic data models
-│   ├── store.py             # JSON file persistence layer
-│   ├── dependencies.py      # Auth dependency (JWT extraction)
+│   ├── store.py             # JSONStore (deprecated) + SQLStore adapter
+│   ├── db.py                # SQLAlchemy engine + session factory
+│   ├── db_models.py         # ORM row models (one per table)
+│   ├── dependencies.py      # Shared engine + Auth dependency (JWT extraction)
 │   ├── exceptions.py        # Custom exception classes and handlers
 │   ├── requirements.txt     # Python dependencies
-│   ├── data/                # JSON data files (users.json, todos.json)
+│   ├── scripts/             # One-shot migration + rollback scripts
+│   ├── data/                # Runtime data (app.db SQLite file + JSON backups)
 │   ├── routers/             # API route handlers
 │   │   ├── auth.py          # Auth endpoints (/api/auth/*)
 │   │   └── todos.py         # Todo endpoints (/api/todos/*)
@@ -90,6 +93,34 @@ todo-app/
 ├── run.bat                  # Windows script to start both servers
 └── run.sh                   # Linux/macOS script to start both servers
 ```
+
+## Data layer (SQLite)
+
+The backend persists to a single SQLite database at `backend/data/app.db`.
+Schema is created at app startup via `init_db()` (idempotent — safe to run
+on every boot). Each table corresponds to a former JSON file:
+`users`, `folders`, `todos`, `notifications`, `attachments`, `reminder_send_log`.
+
+Migrate existing `data/*.json` files into SQLite (idempotent; backs up
+sources as `*.json.bak` first):
+
+```bash
+cd backend
+python3 -m scripts.migrate_json_to_sqlite          # full run
+python3 -m scripts.migrate_json_to_sqlite --dry-run
+```
+
+One-step rollback exports SQLite tables back to JSON files:
+
+```bash
+python3 -m scripts.rollback_sqlite_to_json
+```
+
+Services interact with the DB via the `SQLStore` adapter (same surface as
+the legacy `JSONStore`), so routers, the reminder scheduler, and existing
+tests need no signature changes. List-typed fields (tags, subtasks,
+comments) are stored as JSON-text columns; scalar fields are real columns
+with indexes on `user_id`, `folder_id`, `status`, and `email`.
 
 ## API Endpoints
 

@@ -1,15 +1,27 @@
-"""JSON file-based persistence layer."""
+"""Persistence layer adapters.
+
+Historically the app used :class:`JSONStore` against ``data/*.json`` files.
+Per the SQLite migration spec, :class:`SQLStore` is a drop-in adapter
+with the same public API but backed by SQLAlchemy. Services keep the
+``JSONStore``-shaped interface; the live wiring in ``main.py`` /
+``dependencies.py`` chooses which implementation to instantiate.
+
+``JSONStore`` is retained (deprecated) so existing tests + the rollback
+script can still round-trip data through the JSON shape.
+"""
 
 import json
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 
 
 class JSONStore:
-    """A file-based persistence layer that reads/writes JSON arrays.
+    """DEPRECATED: file-based store, retained for tests + rollback path.
 
-    Uses atomic writes (temp file + os.replace) to prevent file corruption.
+    Use :class:`SQLStore` for new code. Reads/writes JSON arrays with
+    atomic writes (temp file + os.replace) to prevent file corruption.
     Creates the file with an empty array if it does not exist.
     """
 
@@ -170,3 +182,125 @@ class JSONStore:
             return False
         self.write_all(records)
         return True
+
+
+# ---------------------------------------------------------------------------
+# SQLite-backed adapter (Requirement 3.2: same public API as JSONStore)
+# ---------------------------------------------------------------------------
+
+
+def _collection_name_from_path(file_path: str) -> str:
+    """Derive a SQL table-key from a legacy ``data/foo.json`` path."""
+    base = os.path.basename(file_path)
+    if base.endswith(".json"):
+        base = base[:-5]
+    return base
+
+
+class SQLStore:
+    """SQLAlchemy-backed store with the same surface as :class:`JSONStore`.
+
+    Each instance is bound to ONE collection (table). The collection name
+    is derived from the legacy JSON file basename so existing callers can
+    swap ``JSONStore(path)`` for ``SQLStore(session_factory, path)``
+    without re-thinking their wiring.
+
+    All methods commit immediately so failures surface fast (matching the
+    "no silent fallback" requirement). Multi-row operations are wrapped
+    in a single transaction.
+    """
+
+    def __init__(self, session_factory, file_path: str):
+        # Lazy import to avoid pulling SQLAlchemy at import time of store.py
+        from db_models import COLLECTION_TO_MODEL
+
+        self._session_factory = session_factory
+        self.file_path = file_path  # retained for parity / debugging
+        collection = _collection_name_from_path(file_path)
+        if collection not in COLLECTION_TO_MODEL:
+            raise ValueError(
+                f"SQLStore: unknown collection '{collection}'. "
+                f"Known: {sorted(COLLECTION_TO_MODEL.keys())}"
+            )
+        self._model = COLLECTION_TO_MODEL[collection]
+
+    # ---- internal -------------------------------------------------------
+
+    def _session(self):
+        return self._session_factory()
+
+    # ---- API parity with JSONStore --------------------------------------
+
+    def read_all(self) -> list[dict]:
+        with self._session() as s:
+            rows = s.query(self._model).all()
+            return [r.to_dict() for r in rows]
+
+    def write_all(self, data: list[dict]) -> None:
+        """Replace the entire collection contents transactionally."""
+        with self._session() as s:
+            try:
+                s.query(self._model).delete()
+                for record in data:
+                    if not isinstance(record, dict) or "id" not in record:
+                        continue
+                    s.add(self._model.from_dict(record))
+                s.commit()
+            except Exception:
+                s.rollback()
+                raise
+
+    def find_by_id(self, record_id: str) -> dict | None:
+        with self._session() as s:
+            row = s.get(self._model, record_id)
+            return row.to_dict() if row else None
+
+    def find_by_field(self, field: str, value: Any) -> dict | None:
+        if not hasattr(self._model, field):
+            # Fall back to dict scan for fields stored only in extra_json.
+            for record in self.read_all():
+                if record.get(field) == value:
+                    return record
+            return None
+        column = getattr(self._model, field)
+        with self._session() as s:
+            row = s.query(self._model).filter(column == value).first()
+            return row.to_dict() if row else None
+
+    def add(self, record: dict) -> dict:
+        if "id" not in record:
+            raise ValueError("SQLStore.add: record missing 'id'")
+        with self._session() as s:
+            try:
+                s.add(self._model.from_dict(record))
+                s.commit()
+            except Exception:
+                s.rollback()
+                raise
+        return record
+
+    def update(self, record_id: str, updates: dict) -> dict | None:
+        with self._session() as s:
+            row = s.get(self._model, record_id)
+            if row is None:
+                return None
+            try:
+                row.update_from_dict(updates)
+                s.commit()
+                return row.to_dict()
+            except Exception:
+                s.rollback()
+                raise
+
+    def delete(self, record_id: str) -> bool:
+        with self._session() as s:
+            row = s.get(self._model, record_id)
+            if row is None:
+                return False
+            try:
+                s.delete(row)
+                s.commit()
+                return True
+            except Exception:
+                s.rollback()
+                raise

@@ -1,17 +1,29 @@
-"""FastAPI dependencies for request processing."""
+"""FastAPI dependencies for request processing.
+
+Owns the shared SQLAlchemy engine + session factory used by every
+SQLStore-backed router. Tests don't import this module, so the engine
+is only created when the live app boots.
+"""
 
 import os
 
 from fastapi import Request
 
+from db import init_db, make_engine, make_session_factory
 from exceptions import UnauthorizedError
 from models import User
 from services.auth_service import AuthService
-from store import JSONStore
+from store import SQLStore
 
-# Initialize user store and auth service
+# DB engine + session factory — shared across the whole running app.
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-user_store = JSONStore(os.path.join(DATA_DIR, "users.json"))
+engine = make_engine()
+session_factory = make_session_factory(engine)
+# Ensure schema exists before any router creates a store.
+init_db(engine)
+
+# Initialize user store and auth service.
+user_store = SQLStore(session_factory, os.path.join(DATA_DIR, "users.json"))
 auth_service = AuthService(user_store)
 
 

@@ -27,9 +27,10 @@ from routers.folders import router as folders_router
 from routers.notifications import router as notifications_router
 from routers.todos import router as todos_router
 from routers.users import router as users_router
+from dependencies import session_factory
 from services.email_service import build_email_service
 from services.reminder_scheduler import ReminderScheduler
-from store import JSONStore
+from store import SQLStore
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -39,13 +40,16 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: build email service + scheduler
+    # Startup: build email service + scheduler.
+    # DB schema is created at import time by ``dependencies.init_db``.
     email_service = build_email_service(
         os.environ, default_log_path=os.path.join(DATA_DIR, "email_log.jsonl")
     )
-    todo_store = JSONStore(os.path.join(DATA_DIR, "todos.json"))
-    user_store = JSONStore(os.path.join(DATA_DIR, "users.json"))
-    log_store = JSONStore(os.path.join(DATA_DIR, "reminder_send_log.json"))
+    todo_store = SQLStore(session_factory, os.path.join(DATA_DIR, "todos.json"))
+    user_store = SQLStore(session_factory, os.path.join(DATA_DIR, "users.json"))
+    log_store = SQLStore(
+        session_factory, os.path.join(DATA_DIR, "reminder_send_log.json")
+    )
     rate_cap = int(os.environ.get("REMINDER_RATE_LIMIT_PER_MINUTE", "100"))
     scheduler = ReminderScheduler(
         todo_store=todo_store,
