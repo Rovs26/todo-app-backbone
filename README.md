@@ -141,4 +141,6 @@ falls back to the file-log backend (no emails are sent).
 | POST | `/api/ai/parse-todo` | Parse a NL phrase into `{data, source}` for the quick-add bar |
 | POST | `/api/ai/parse-image` | Extract todo candidates from a photo (multipart image) |
 | POST | `/api/ai/transcribe` | Whisper transcription (multipart audio) |
+| POST | `/api/ai/voice-action` | Plan structured actions from a transcript (no mutations) |
+| POST | `/api/ai/voice-action/apply` | Execute a user-approved action list in order |
 | POST | `/api/ai/chat` | Conversational assistant grounded in the user's todos |

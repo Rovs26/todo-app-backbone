@@ -32,6 +32,13 @@
 
           <div class="flex items-center gap-2 flex-shrink-0">
             <NotificationBell />
+            <VoiceAgentButton
+              :phase="voice.phase.value"
+              :supported="voice.supported.value"
+              :ai-enabled="aiEnabled"
+              @start="voice.start"
+              @stop="voice.stop"
+            />
             <DarkModeToggle />
             <button
               type="button"
@@ -457,6 +464,18 @@
       :default-folder-id="folderFilter"
       @created="onImageImportCreated"
     />
+
+    <VoiceAgentPanel
+      :phase="voice.phase.value"
+      :plan="voice.plan.value"
+      :apply-outcomes="voice.applyOutcomes.value"
+      :error-message="voice.errorMessage.value"
+      :folders="folders"
+      @stop="voice.stop"
+      @cancel="voice.cancel"
+      @apply="onVoiceApply"
+      @edit-transcript="voice.editTranscript"
+    />
   </div>
 </template>
 
@@ -468,6 +487,7 @@ import { useToast } from '~/composables/useToast'
 import { useFolders } from '~/composables/useFolders'
 import { useNotifications } from '~/composables/useNotifications'
 import { useStreak } from '~/composables/useStreak'
+import { useVoiceAgent } from '~/composables/useVoiceAgent'
 import { todosApi, aiApi } from '~/utils/api'
 import type { Folder, TagInfo, Todo, TodoCreate, TodoUpdate } from '~/types'
 
@@ -596,6 +616,9 @@ async function handleBulkAction(action: string, payload?: Record<string, unknown
 // AI status
 const aiEnabled = ref(false)
 
+// Voice agent
+const voice = useVoiceAgent()
+
 // Tags
 const availableTags = ref<TagInfo[]>([])
 
@@ -695,6 +718,28 @@ async function onImageImportCreated() {
   await Promise.all([fetchTodos(), fetchStats(), fetchFolderStats(), refreshTags()])
   invalidateStreak()
   summaryRefresh.value++
+}
+
+async function onVoiceApply() {
+  const ok = await voice.applySelected()
+  if (voice.applyOutcomes.value && voice.applyOutcomes.value.applied.length > 0) {
+    await Promise.all([
+      fetchTodos(),
+      fetchStats(),
+      fetchFolders(),
+      fetchFolderStats(),
+      refreshTags(),
+    ])
+    invalidateStreak()
+    summaryRefresh.value++
+  }
+  if (ok) {
+    toastSuccess('Voice actions applied.')
+  } else if (voice.applyOutcomes.value?.failed) {
+    toastError(
+      `Stopped at step ${voice.applyOutcomes.value.failed.index + 1}: ${voice.applyOutcomes.value.failed.error_message}`,
+    )
+  }
 }
 
 function onQuickAddParsed(data: any, source: 'openai' | 'local') {

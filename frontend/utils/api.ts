@@ -173,6 +173,13 @@ export const todosApi = {
 
 // AI / chat / Whisper API
 
+export interface VoiceAction {
+  name: 'create_folder' | 'create_todo' | 'add_comment' | 'mark_done' | 'set_priority'
+  arguments: Record<string, any>
+  resolved_folder_id?: string | null
+  resolved_todo_id?: string | null
+}
+
 export interface ParsedTodo {
   title: string
   description?: string | null
@@ -206,6 +213,21 @@ export const aiApi = {
       body: fd,
       credentials: 'include',
     })
+  },
+
+  voiceAction(transcript: string, context?: { active_folder_id?: string | null; active_todo_id?: string | null }) {
+    return apiFetch<{
+      actions: VoiceAction[]
+      assistant_reply: string
+    }>('/ai/voice-action', { method: 'POST', body: { transcript, context: context || null } })
+  },
+
+  applyVoiceActions(actions: VoiceAction[]) {
+    return apiFetch<{
+      applied: { index: number; name: string; result: any }[]
+      failed: { index: number; action: VoiceAction; error_class: string; error_message: string } | null
+      remaining: VoiceAction[]
+    }>('/ai/voice-action/apply', { method: 'POST', body: { actions } })
   },
 
   transcribe(blob: Blob, filename = 'recording.webm') {

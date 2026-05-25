@@ -10,9 +10,10 @@ from pydantic import BaseModel, Field
 
 from dependencies import get_current_user
 from models import User
+from routers.comments import comment_service
 from routers.folders import folder_service
 from routers.todos import todo_service
-from services import ai_service
+from services import ai_service, voice_agent
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -145,6 +146,67 @@ async def parse_image(
         )
 
     return {"items": result.get("items", []), "image_url": image_url}
+
+
+class VoiceActionContext(BaseModel):
+    active_folder_id: str | None = None
+    active_todo_id: str | None = None
+
+
+class VoiceActionRequest(BaseModel):
+    transcript: str = Field(min_length=1, max_length=2000)
+    context: VoiceActionContext | None = None
+
+
+class VoiceApplyRequest(BaseModel):
+    actions: list[dict] = Field(default_factory=list)
+
+
+@router.post("/voice-action")
+async def plan_voice_action(
+    body: VoiceActionRequest,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Plan a list of structured actions from a spoken transcript.
+
+    Pure plan — no mutations. The frontend shows the proposal to the user
+    for confirmation before the apply endpoint is called.
+    """
+    if not ai_service.is_enabled():
+        raise HTTPException(
+            status_code=503,
+            detail="Voice agent requires an OpenAI API key.",
+        )
+
+    folders = [f.model_dump() for f in folder_service.list_for_user(current_user.id)]
+    todos = [t.model_dump(mode="json") for t in todo_service.list_todos(user_id=current_user.id)]
+    todos.sort(
+        key=lambda t: (t.get("updated_at") or t.get("created_at") or ""),
+        reverse=True,
+    )
+
+    try:
+        result = voice_agent.plan(
+            transcript=body.transcript, folders=folders, todos=todos
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=f"Voice planner failed: {exc}")
+    return result
+
+
+@router.post("/voice-action/apply")
+async def apply_voice_action(
+    body: VoiceApplyRequest,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Execute the user-approved actions in order."""
+    return voice_agent.apply(
+        user_id=current_user.id,
+        actions=body.actions,
+        folder_service=folder_service,
+        todo_service=todo_service,
+        comment_service=comment_service,
+    )
 
 
 class ParseTodoRequest(BaseModel):
