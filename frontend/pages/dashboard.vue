@@ -195,7 +195,23 @@
 
           <!-- View bodies -->
           <section v-if="view === 'list'" aria-label="Todo list">
-            <QuickAddBar @parsed="onQuickAddParsed" />
+            <div class="flex items-start gap-2 mb-4">
+              <div class="flex-1 min-w-0">
+                <QuickAddBar class="!mb-0" @parsed="onQuickAddParsed" />
+              </div>
+              <button
+                type="button"
+                class="p-2 mt-px rounded-md border border-secondary-300 dark:border-secondary-700 text-secondary-600 dark:text-secondary-300 hover:text-primary-600 hover:border-primary-400 dark:hover:text-primary-400 transition-colors"
+                aria-label="Import todos from an image"
+                title="Import from image"
+                @click="showImageImport = true"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+            </div>
             <LoadingSkeleton v-if="loading && todos.length === 0" variant="card" :count="5" aria-label="Loading todos" />
             <EmptyState
               v-else-if="!loading && todos.length === 0"
@@ -434,6 +450,13 @@
     </div>
 
     <SettingsDrawer v-model="showSettings" />
+
+    <ImageImportDialog
+      v-model="showImageImport"
+      :folders="folders"
+      :default-folder-id="folderFilter"
+      @created="onImageImportCreated"
+    />
   </div>
 </template>
 
@@ -507,6 +530,7 @@ const todoToDelete = ref<Todo | null>(null)
 const loggingOut = ref(false)
 const showKeyboardHelp = ref(false)
 const showSettings = ref(false)
+const showImageImport = ref(false)
 const summaryRefresh = ref(0)
 
 // Drag & drop
@@ -665,6 +689,12 @@ function closeForm() {
   editingTodo.value = null
   quickAddPrefill.value = null
   quickAddSource.value = null
+}
+
+async function onImageImportCreated() {
+  await Promise.all([fetchTodos(), fetchStats(), fetchFolderStats(), refreshTags()])
+  invalidateStreak()
+  summaryRefresh.value++
 }
 
 function onQuickAddParsed(data: any, source: 'openai' | 'local') {

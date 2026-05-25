@@ -9,6 +9,7 @@ via python-dotenv at process startup).
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 from datetime import datetime, timezone
@@ -298,6 +299,117 @@ def parse_todo(text: str, folders: list[dict]) -> dict:
             "source": "local",
             "error": type(exc).__name__,
         }
+
+
+_PARSE_IMAGE_SCHEMA = {
+    "name": "image_todos",
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "title": {"type": "string", "minLength": 1, "maxLength": 200},
+                        "priority": {
+                            "type": ["string", "null"],
+                            "enum": ["low", "medium", "high", None],
+                        },
+                        "due_date": {"type": ["string", "null"]},
+                        "tags": {
+                            "type": ["array", "null"],
+                            "items": {"type": "string"},
+                        },
+                    },
+                    "required": ["title"],
+                },
+            },
+        },
+        "required": ["items"],
+    },
+}
+
+
+_PARSE_IMAGE_MAX_ITEMS = 30
+
+
+def parse_image(image_bytes: bytes, mime: str, *, model: str | None = None) -> dict:
+    """Extract a list of todo candidates from a photo of a written/whiteboard list.
+
+    Returns ``{"items": list[dict]}`` on success, raises ``RuntimeError`` if
+    AI is unavailable or the call fails. Items are capped at
+    ``_PARSE_IMAGE_MAX_ITEMS`` (Requirement 1.7).
+    """
+    client = _client()
+    if not client:
+        raise RuntimeError("ai_unavailable")
+
+    use_model = model or os.getenv("OPENAI_VISION_MODEL", "gpt-4o")
+    b64 = base64.b64encode(image_bytes).decode("ascii")
+    data_url = f"data:{mime};base64,{b64}"
+
+    system = (
+        "You extract a list of actionable to-do items from a photo of a "
+        "handwritten list, whiteboard, sticky-notes, or printed checklist. "
+        "Return ONLY the JSON object described by the schema. "
+        "Each item's title should be one short imperative phrase (1-12 words). "
+        "Skip headers, dates, and decorative text. If you cannot find clear "
+        "items, return an empty `items` array."
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model=use_model,
+            messages=[
+                {"role": "system", "content": system},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Extract todos from this image."},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                },
+            ],
+            response_format={"type": "json_schema", "json_schema": _PARSE_IMAGE_SCHEMA},
+            temperature=0.1,
+            max_tokens=1500,
+        )
+    except Exception as exc:
+        raise RuntimeError(type(exc).__name__) from exc
+
+    raw = (response.choices[0].message.content or "").strip()
+    try:
+        parsed = json.loads(raw) if raw else {"items": []}
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("JSONDecodeError") from exc
+
+    items = parsed.get("items") if isinstance(parsed, dict) else None
+    if not isinstance(items, list):
+        items = []
+    cleaned: list[dict] = []
+    for item in items[:_PARSE_IMAGE_MAX_ITEMS]:
+        if not isinstance(item, dict):
+            continue
+        title = (item.get("title") or "").strip()
+        if not title:
+            continue
+        out: dict = {"title": title[:200]}
+        pri = item.get("priority")
+        if pri in ("low", "medium", "high"):
+            out["priority"] = pri
+        due = item.get("due_date")
+        if isinstance(due, str) and due:
+            out["due_date"] = due
+        tags = item.get("tags")
+        if isinstance(tags, list):
+            clean_tags = [str(t).strip().lower() for t in tags if str(t).strip()]
+            if clean_tags:
+                out["tags"] = clean_tags
+        cleaned.append(out)
+    return {"items": cleaned}
 
 
 def transcribe_audio(file_bytes: bytes, filename: str) -> str | None:

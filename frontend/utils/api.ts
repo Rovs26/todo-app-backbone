@@ -197,6 +197,17 @@ export const aiApi = {
     )
   },
 
+  parseImage(file: File) {
+    const fd = new FormData()
+    fd.append('file', file)
+    return $fetch<{ items: ParsedTodo[]; image_url: string }>('/ai/parse-image', {
+      baseURL: BASE_URL,
+      method: 'POST',
+      body: fd,
+      credentials: 'include',
+    })
+  },
+
   transcribe(blob: Blob, filename = 'recording.webm') {
     const fd = new FormData()
     fd.append('file', blob, filename)

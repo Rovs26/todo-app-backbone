@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import uuid
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
@@ -75,6 +78,73 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     source: str
+
+
+OCR_UPLOAD_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "data", "uploads", "ocr"
+)
+os.makedirs(OCR_UPLOAD_DIR, exist_ok=True)
+
+ALLOWED_OCR_IMAGE_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/webp",
+    "image/gif",
+}
+MAX_OCR_IMAGE_BYTES = 8 * 1024 * 1024  # 8 MB
+_OCR_EXT = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+
+
+@router.post("/parse-image")
+async def parse_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Extract a list of todo candidates from an uploaded image.
+
+    Saves the upload under ``data/uploads/ocr/<uuid>.<ext>`` and returns
+    ``{items, image_url}``. The frontend renders ``items`` as a checklist
+    that the user reviews before creating individual todos.
+    """
+    if not ai_service.is_enabled():
+        raise HTTPException(
+            status_code=503,
+            detail="Vision OCR requires an OpenAI API key. Set OPENAI_API_KEY to enable.",
+        )
+
+    content_type = (file.content_type or "").lower().split(";")[0].strip()
+    if content_type not in ALLOWED_OCR_IMAGE_TYPES:
+        raise HTTPException(status_code=415, detail=f"Unsupported image type: {content_type}")
+
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Empty image upload")
+    if len(contents) > MAX_OCR_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Image too large (max 8 MB)")
+
+    ext = _OCR_EXT[content_type]
+    filename = f"{uuid.uuid4().hex}{ext}"
+    path = os.path.join(OCR_UPLOAD_DIR, filename)
+    with open(path, "wb") as fh:
+        fh.write(contents)
+    image_url = f"/uploads/ocr/{filename}"
+
+    try:
+        result = ai_service.parse_image(contents, content_type)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Vision parser failed: {exc}",
+        )
+
+    return {"items": result.get("items", []), "image_url": image_url}
 
 
 class ParseTodoRequest(BaseModel):

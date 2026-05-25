@@ -28,6 +28,7 @@ Thumbs.db
 backend/data/users.json
 backend/data/todos.json
 backend/data/notifications.json
+backend/data/uploads/
 
 # Environment Variables
 .env
