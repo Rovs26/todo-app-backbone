@@ -44,6 +44,12 @@
             </div>
 
             <form @submit.prevent="handleSubmit" novalidate>
+              <p
+                v-if="!isEditing && prefillSource === 'local'"
+                class="mb-3 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded px-2 py-1"
+              >
+                Parsed locally — no AI key configured. Review the fields before saving.
+              </p>
               <!-- Title with mic -->
               <div class="mb-4">
                 <label for="todo-title" class="block text-sm font-medium text-secondary-700 dark:text-secondary-300 mb-1.5">
@@ -319,12 +325,16 @@ interface Props {
   todo?: Todo | null
   folders?: Folder[]
   tagSuggestions?: string[]
+  prefill?: Partial<TodoCreate> | null
+  prefillSource?: 'openai' | 'local' | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
   todo: null,
   folders: () => [],
   tagSuggestions: () => [],
+  prefill: null,
+  prefillSource: null,
 })
 
 const emit = defineEmits<{
@@ -427,18 +437,25 @@ function hydrateFromProps() {
       imagePreview.value = resolveImageUrl(props.todo.image_url)
     }
   } else {
-    form.title = ''
-    form.description = ''
-    form.priority = 'medium'
-    form.due_date = ''
-    form.reminder_at = ''
-    form.status = 'pending'
-    form.folder_id = ''
-    form.tags = []
-    form.subtasks = []
-    form.recurrence = 'none'
-    form.recurrence_until = ''
-    form.recurrence_count = null
+    const p = props.prefill || {}
+    form.title = (p.title as string) ?? ''
+    form.description = (p.description as string) ?? ''
+    form.priority = (p.priority as 'low' | 'medium' | 'high') ?? 'medium'
+    form.due_date = (p.due_date as string) ?? ''
+    form.reminder_at = isoToLocalInput(p.reminder_at as string | null | undefined)
+    form.status = (p.status as 'pending' | 'in-progress' | 'done') ?? 'pending'
+    form.folder_id = (p.folder_id as string) ?? ''
+    form.tags = Array.isArray(p.tags) ? [...p.tags] : []
+    form.subtasks = Array.isArray(p.subtasks)
+      ? (p.subtasks as Subtask[]).map((s: any) =>
+          typeof s === 'string'
+            ? { id: cryptoRandomId(), title: s, done: false }
+            : { ...s },
+        )
+      : []
+    form.recurrence = ((p.recurrence as any) || 'none')
+    form.recurrence_until = (p.recurrence_until as string) ?? ''
+    form.recurrence_count = (p.recurrence_count as number | null) ?? null
   }
   applyTo.value = 'occurrence'
 }

@@ -132,3 +132,12 @@ falls back to the file-log backend (no emails are sent).
 | GET | `/api/todos/{id}` | Get a specific todo |
 | PUT | `/api/todos/{id}` | Update a todo |
 | DELETE | `/api/todos/{id}` | Delete a todo |
+
+### AI
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/ai/status` | Returns `{enabled}` based on `OPENAI_API_KEY` |
+| POST | `/api/ai/parse-todo` | Parse a NL phrase into `{data, source}` for the quick-add bar |
+| POST | `/api/ai/transcribe` | Whisper transcription (multipart audio) |
+| POST | `/api/ai/chat` | Conversational assistant grounded in the user's todos |

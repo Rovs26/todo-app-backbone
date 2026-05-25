@@ -77,6 +77,27 @@ class ChatResponse(BaseModel):
     source: str
 
 
+class ParseTodoRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+
+
+@router.post("/parse-todo")
+async def parse_todo(
+    body: ParseTodoRequest,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Parse a natural-language phrase into structured todo fields.
+
+    Returns ``{"data": {...}, "source": "openai"|"local", "error"?: str}``.
+    Never auto-creates a todo — the frontend opens the create modal with the
+    parsed fields pre-filled so the user can review/edit/confirm.
+    """
+    folders = [
+        f.model_dump() for f in folder_service.list_for_user(current_user.id)
+    ]
+    return ai_service.parse_todo(text=body.text, folders=folders)
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     body: ChatRequest,

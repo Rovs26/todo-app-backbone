@@ -172,9 +172,29 @@ export const todosApi = {
 }
 
 // AI / chat / Whisper API
+
+export interface ParsedTodo {
+  title: string
+  description?: string | null
+  priority?: 'low' | 'medium' | 'high' | null
+  due_date?: string | null
+  reminder_at?: string | null
+  recurrence?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | null
+  tags?: string[] | null
+  folder_id?: string | null
+  subtasks?: string[] | null
+}
+
 export const aiApi = {
   status() {
     return apiFetch<{ enabled: boolean }>('/ai/status')
+  },
+
+  parseTodo(text: string) {
+    return apiFetch<{ data: ParsedTodo; source: 'openai' | 'local'; error?: string }>(
+      '/ai/parse-todo',
+      { method: 'POST', body: { text } },
+    )
   },
 
   transcribe(blob: Blob, filename = 'recording.webm') {

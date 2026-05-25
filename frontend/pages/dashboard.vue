@@ -195,6 +195,7 @@
 
           <!-- View bodies -->
           <section v-if="view === 'list'" aria-label="Todo list">
+            <QuickAddBar @parsed="onQuickAddParsed" />
             <LoadingSkeleton v-if="loading && todos.length === 0" variant="card" :count="5" aria-label="Loading todos" />
             <EmptyState
               v-else-if="!loading && todos.length === 0"
@@ -388,6 +389,8 @@
       :todo="editingTodo"
       :folders="folders"
       :tag-suggestions="availableTags.map(t => t.name)"
+      :prefill="quickAddPrefill"
+      :prefill-source="quickAddSource"
       @submit="handleFormSubmit"
       @cancel="closeForm"
       @update:visible="(v: boolean) => { if (!v) closeForm() }"
@@ -497,6 +500,8 @@ const searchInputRef = ref<HTMLInputElement | null>(null)
 // Modals
 const showForm = ref(false)
 const editingTodo = ref<Todo | null>(null)
+const quickAddPrefill = ref<Partial<TodoCreate> | null>(null)
+const quickAddSource = ref<'openai' | 'local' | null>(null)
 const showDeleteConfirm = ref(false)
 const todoToDelete = ref<Todo | null>(null)
 const loggingOut = ref(false)
@@ -645,15 +650,44 @@ async function handleSortBy(value: string | undefined) {
 
 function openCreate() {
   editingTodo.value = null
+  quickAddPrefill.value = null
+  quickAddSource.value = null
   showForm.value = true
 }
 function openEdit(todo: Todo) {
   editingTodo.value = todo
+  quickAddPrefill.value = null
+  quickAddSource.value = null
   showForm.value = true
 }
 function closeForm() {
   showForm.value = false
   editingTodo.value = null
+  quickAddPrefill.value = null
+  quickAddSource.value = null
+}
+
+function onQuickAddParsed(data: any, source: 'openai' | 'local') {
+  // Normalize subtasks (server may send array of strings)
+  const subtasks = Array.isArray(data?.subtasks)
+    ? data.subtasks
+        .map((s: any) => (typeof s === 'string' ? s : s?.title))
+        .filter(Boolean)
+    : undefined
+  quickAddPrefill.value = {
+    title: data?.title ?? '',
+    description: data?.description ?? undefined,
+    priority: data?.priority ?? undefined,
+    due_date: data?.due_date ?? undefined,
+    reminder_at: data?.reminder_at ?? undefined,
+    recurrence: data?.recurrence ?? undefined,
+    tags: Array.isArray(data?.tags) ? data.tags : undefined,
+    folder_id: data?.folder_id ?? undefined,
+    subtasks: subtasks as any,
+  }
+  quickAddSource.value = source
+  editingTodo.value = null
+  showForm.value = true
 }
 
 async function handleFormSubmit(payload: any) {

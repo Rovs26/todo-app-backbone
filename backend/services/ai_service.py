@@ -214,6 +214,92 @@ def coach_message(
         return None
 
 
+_PARSE_TODO_SCHEMA = {
+    "name": "parsed_todo",
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "title": {"type": "string", "minLength": 1, "maxLength": 200},
+            "description": {"type": ["string", "null"], "maxLength": 2000},
+            "priority": {"type": ["string", "null"], "enum": ["low", "medium", "high", None]},
+            "due_date": {"type": ["string", "null"]},
+            "reminder_at": {"type": ["string", "null"]},
+            "recurrence": {
+                "type": ["string", "null"],
+                "enum": ["none", "daily", "weekly", "monthly", "yearly", None],
+            },
+            "tags": {"type": ["array", "null"], "items": {"type": "string"}},
+            "folder_id": {"type": ["string", "null"]},
+            "subtasks": {"type": ["array", "null"], "items": {"type": "string"}},
+        },
+        "required": ["title"],
+    },
+}
+
+
+def parse_todo(text: str, folders: list[dict]) -> dict:
+    """Parse a natural-language phrase into structured todo fields.
+
+    Returns ``{"data": dict, "source": "openai"|"local", "error"?: str}``.
+
+    The OpenAI call is forced to follow ``_PARSE_TODO_SCHEMA`` via
+    ``response_format={"type":"json_schema", ...}``. Callers always get a
+    ``title`` (the schema requires it). When the model is unavailable or the
+    call errors, the deterministic local parser handles the input.
+    """
+    from services.quick_add_parser import parse_local  # local import to avoid cycle
+
+    client = _client()
+    if not client:
+        return {"data": parse_local(text), "source": "local"}
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    folder_pairs = [
+        {"id": f.get("id"), "name": f.get("name")}
+        for f in folders
+        if f.get("id") and f.get("name")
+    ]
+    system = (
+        "You extract structured todo fields from a single natural-language "
+        "phrase. Respond ONLY with the JSON object — no commentary.\n"
+        f"Today (UTC) is {today}. Resolve relative dates like 'tomorrow', "
+        "'next Friday', 'in 3 days' to a YYYY-MM-DD `due_date`. "
+        "Resolve clock-specific phrases like 'remind me at 9am tomorrow' to "
+        "an ISO 8601 `reminder_at`. "
+        "Recognize !high|!med|!low and #tag inline tokens. "
+        "If the phrase mentions one of the user's folders by name, set "
+        "`folder_id` to that folder's id. Otherwise leave it null. "
+        "Recurrence values are exactly: none, daily, weekly, monthly, yearly."
+    )
+    user_payload = {
+        "text": text,
+        "folders": folder_pairs,
+    }
+    try:
+        response = client.chat.completions.create(
+            model=_DEFAULT_MODEL,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+            ],
+            response_format={"type": "json_schema", "json_schema": _PARSE_TODO_SCHEMA},
+            temperature=0.1,
+            max_tokens=400,
+        )
+        raw = (response.choices[0].message.content or "").strip()
+        parsed = json.loads(raw) if raw else {}
+        if not isinstance(parsed, dict) or not parsed.get("title"):
+            return {"data": parse_local(text), "source": "local"}
+        return {"data": parsed, "source": "openai"}
+    except Exception as exc:
+        return {
+            "data": parse_local(text),
+            "source": "local",
+            "error": type(exc).__name__,
+        }
+
+
 def transcribe_audio(file_bytes: bytes, filename: str) -> str | None:
     """Transcribe audio bytes via Whisper. Returns ``None`` on failure."""
     client = _client()
