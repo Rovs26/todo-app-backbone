@@ -440,12 +440,16 @@ def chat(
     history: list[dict],
     todos: list[dict],
     folders: list[dict],
+    weather: dict | None = None,
 ) -> str | None:
     """Conversational assistant grounded in the user's todos.
 
     ``history`` is a list of ``{"role": "user"|"assistant", "content": str}``
-    entries representing prior turns of the same conversation. Returns
-    ``None`` when AI is unavailable.
+    entries representing prior turns of the same conversation. ``weather`` is
+    an optional snapshot (current + ``forecast`` list) supplied by the
+    frontend via Open-Meteo; when present the assistant can answer questions
+    about today/tomorrow's weather instead of refusing. Returns ``None`` when
+    AI is unavailable.
     """
     client = _client()
     if not client:
@@ -460,6 +464,17 @@ def chat(
             dict(_todo_brief(t), id=t.get("id")) for t in todos[:80]
         ],
     }
+    if weather:
+        context["weather"] = weather
+
+    weather_clause = (
+        " If a `weather` object is present in the JSON it contains real "
+        "Open-Meteo data for the user's location, including a `forecast` "
+        "array keyed by date — use it to answer weather questions (today, "
+        "tomorrow, day after) instead of refusing."
+        if weather
+        else ""
+    )
 
     messages: list[dict] = [
         {
@@ -470,6 +485,7 @@ def chat(
                 "JSON in the next message. Use that context when answering. "
                 "Keep replies short (2-4 sentences). Reference todos by their "
                 "title in quotes when useful. No markdown headings."
+                + weather_clause
             ),
         },
         {

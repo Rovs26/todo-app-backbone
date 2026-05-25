@@ -43,6 +43,20 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Lightweight column-level migration. SQLAlchemy's create_all() only
+    # creates missing tables, not missing columns on existing tables, so a
+    # schema field added after the first run won't appear until we ALTER.
+    try:
+        engine = session_factory.kw["bind"]
+        with engine.connect() as conn:
+            existing = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(todos)").fetchall()}
+            if existing and "location" not in existing:
+                conn.exec_driver_sql("ALTER TABLE todos ADD COLUMN location TEXT")
+                conn.commit()
+                log.info("Added todos.location column to existing SQLite DB.")
+    except Exception as exc:
+        log.warning("Column migration skipped: %s", exc)
+
     # Auto-migrate JSON→SQLite if the users table is empty and JSON files exist.
     # This ensures dev data survives server restarts and git pulls.
     try:

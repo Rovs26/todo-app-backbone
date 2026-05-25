@@ -241,10 +241,14 @@ export const aiApi = {
     })
   },
 
-  chat(message: string, history: { role: 'user' | 'assistant'; content: string }[]) {
+  chat(
+    message: string,
+    history: { role: 'user' | 'assistant'; content: string }[],
+    weather?: Record<string, unknown> | null,
+  ) {
     return apiFetch<{ reply: string; source: string }>('/ai/chat', {
       method: 'POST',
-      body: { message, history },
+      body: { message, history, weather: weather ?? undefined },
     })
   },
 }

@@ -118,11 +118,47 @@
             </svg>
             {{ formattedReminderAt }}
           </span>
+
+          <!-- Presence indicators (click to expand) -->
+          <button
+            v-if="todo.description"
+            type="button"
+            class="inline-flex items-center gap-0.5 text-xs text-secondary-500 dark:text-secondary-400 hover:text-primary-600 dark:hover:text-primary-400"
+            :title="expanded ? 'Hide notes' : 'Show notes'"
+            @click="expanded = !expanded"
+          >📝</button>
+          <button
+            v-if="todo.subtasks && todo.subtasks.length"
+            type="button"
+            class="inline-flex items-center gap-0.5 text-xs text-secondary-500 dark:text-secondary-400 hover:text-primary-600 dark:hover:text-primary-400"
+            :title="expanded ? 'Hide subtasks' : 'Show subtasks'"
+            @click="expanded = !expanded"
+          >☑️ {{ subtaskDoneCount }}/{{ todo.subtasks.length }}</button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-0.5 text-xs text-secondary-500 dark:text-secondary-400 hover:text-primary-600 dark:hover:text-primary-400"
+            :title="expanded ? 'Hide comments' : 'Show comments'"
+            @click="expanded = !expanded"
+          >💬</button>
         </div>
       </div>
 
       <!-- Action buttons -->
-      <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      <div class="flex items-center gap-1">
+        <!-- Expand caret (always visible) -->
+        <button
+          type="button"
+          class="p-1.5 rounded-lg text-secondary-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:text-primary-400 dark:hover:bg-primary-900/20 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          :aria-label="expanded ? 'Collapse details' : 'Expand details'"
+          :aria-expanded="expanded"
+          @click="expanded = !expanded"
+        >
+          <svg class="w-4 h-4 transition-transform duration-200" :class="{ 'rotate-180': expanded }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
         <!-- Edit button -->
         <button
           type="button"
@@ -146,13 +182,86 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
         </button>
+        </div>
       </div>
+    </div>
+
+    <!-- Expanded panel: inline notes, subtasks, comments -->
+    <div v-if="expanded" class="mt-4 pt-4 border-t border-secondary-200 dark:border-secondary-700 space-y-4">
+      <!-- Notes -->
+      <div>
+        <label class="block text-xs font-semibold text-secondary-700 dark:text-secondary-300 mb-1">📝 Notes</label>
+        <textarea
+          v-model="editDescription"
+          rows="2"
+          class="w-full text-sm rounded-md border border-secondary-300 dark:border-secondary-700 bg-white dark:bg-secondary-800 p-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:text-white"
+          placeholder="Add notes…"
+          maxlength="2000"
+          @blur="saveDescription"
+        />
+      </div>
+
+      <!-- Subtasks -->
+      <div>
+        <label class="block text-xs font-semibold text-secondary-700 dark:text-secondary-300 mb-1">
+          ☑️ Subtasks
+          <span v-if="todo.subtasks && todo.subtasks.length" class="font-normal text-secondary-500">
+            ({{ subtaskDoneCount }}/{{ todo.subtasks.length }})
+          </span>
+        </label>
+        <ul v-if="todo.subtasks && todo.subtasks.length" class="space-y-1 mb-2">
+          <li
+            v-for="s in todo.subtasks"
+            :key="s.id"
+            class="group/sub flex items-center gap-2"
+          >
+            <input
+              type="checkbox"
+              class="rounded text-primary-600 focus:ring-primary-500"
+              :checked="s.done"
+              :aria-label="s.title"
+              @change="toggleSubtask(s.id)"
+            />
+            <span
+              class="flex-1 text-sm"
+              :class="s.done ? 'line-through text-secondary-400' : 'text-secondary-800 dark:text-secondary-200'"
+            >{{ s.title }}</span>
+            <button
+              type="button"
+              class="opacity-0 group-hover/sub:opacity-100 text-xs text-red-600 hover:underline"
+              :aria-label="`Remove ${s.title}`"
+              @click="removeSubtask(s.id)"
+            >×</button>
+          </li>
+        </ul>
+        <div class="flex items-center gap-2">
+          <input
+            v-model="newSubtaskTitle"
+            type="text"
+            class="flex-1 text-sm rounded-md border border-secondary-300 dark:border-secondary-700 bg-white dark:bg-secondary-800 px-2 py-1 dark:text-white"
+            placeholder="Add a subtask… (Enter to save)"
+            maxlength="200"
+            @keydown.enter.prevent="addSubtask"
+          />
+          <button
+            type="button"
+            class="text-xs px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
+            :disabled="!newSubtaskTitle.trim()"
+            @click="addSubtask"
+          >Add</button>
+        </div>
+      </div>
+
+      <!-- Comments -->
+      <CommentsSection :key="todo.id" :todo-id="todo.id" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { Todo } from '~/types'
+import { computed, ref, watch } from 'vue'
+import type { Subtask, Todo } from '~/types'
+import CommentsSection from './CommentsSection.vue'
 
 interface Props {
   todo: Todo
@@ -170,6 +279,56 @@ const emit = defineEmits<{
 const isEditingTitle = ref(false)
 const editTitle = ref('')
 const titleInputRef = ref<HTMLInputElement | null>(null)
+
+// Expand/collapse state for the inline notes/subtasks/comments panel.
+const expanded = ref(false)
+const editDescription = ref(props.todo.description ?? '')
+const newSubtaskTitle = ref('')
+
+// Keep the local description draft in sync if the parent updates the prop
+// (e.g. another client edits or we just saved). Avoids stale text.
+watch(() => props.todo.description, (val) => {
+  editDescription.value = val ?? ''
+})
+
+const subtaskDoneCount = computed(
+  () => (props.todo.subtasks || []).filter((s) => s.done).length,
+)
+
+function saveDescription() {
+  const next = editDescription.value.trim() || null
+  const current = props.todo.description ?? null
+  if (next === current) return
+  emit('update', props.todo.id, { description: next as any })
+}
+
+function genSubtaskId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
+  return Math.random().toString(36).slice(2, 11)
+}
+
+function toggleSubtask(id: string) {
+  const next: Subtask[] = (props.todo.subtasks || []).map((s) =>
+    s.id === id ? { ...s, done: !s.done } : s,
+  )
+  emit('update', props.todo.id, { subtasks: next } as any)
+}
+
+function removeSubtask(id: string) {
+  const next: Subtask[] = (props.todo.subtasks || []).filter((s) => s.id !== id)
+  emit('update', props.todo.id, { subtasks: next } as any)
+}
+
+function addSubtask() {
+  const title = newSubtaskTitle.value.trim()
+  if (!title) return
+  const next: Subtask[] = [
+    ...(props.todo.subtasks || []),
+    { id: genSubtaskId(), title, done: false },
+  ]
+  emit('update', props.todo.id, { subtasks: next } as any)
+  newSubtaskTitle.value = ''
+}
 
 function startEditTitle() {
   editTitle.value = props.todo.title

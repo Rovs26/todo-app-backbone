@@ -118,6 +118,9 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 import { aiApi } from '~/utils/api'
+import { useWeather } from '~/composables/useWeather'
+
+const { weather, load: loadWeather } = useWeather()
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -155,8 +158,16 @@ async function send() {
   messages.value.push({ role: 'user', content: text })
   pending.value = true
   await scrollToBottom()
+
+  // Best-effort: include weather context so the assistant can answer
+  // "what's the weather tomorrow?" using real Open-Meteo data we already
+  // fetch for the quick-add hint. Silently skipped if geolocation is denied.
+  if (!weather.value) {
+    try { await loadWeather() } catch { /* ignore */ }
+  }
+
   try {
-    const response = await aiApi.chat(text, history)
+    const response = await aiApi.chat(text, history, weather.value)
     messages.value.push({ role: 'assistant', content: response.reply })
   } catch (err: any) {
     error.value = err?.message ?? 'Could not reach the assistant'

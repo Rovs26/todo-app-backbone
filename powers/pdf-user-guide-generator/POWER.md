@@ -3,7 +3,7 @@ name: "pdf-user-guide-generator"
 displayName: "PDF User Guide Generator"
 description: "Automatically generate comprehensive PDF user guides for frontend applications by exploring the codebase, launching the app, and capturing screenshots of every page and interactive state using Playwright browser automation."
 keywords: ["pdf", "documentation", "user-guide", "screenshots", "playwright", "automation", "frontend", "testing"]
-author: "Kiro Power Builder"
+author: "Rovince Eduvane"
 ---
 
 # PDF User Guide Generator

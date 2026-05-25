@@ -9,6 +9,18 @@
 
 import { ref } from 'vue'
 
+export interface WeatherForecastDay {
+  /** ISO date, e.g. "2026-05-26" */
+  date: string
+  tempMaxC: number
+  tempMinC: number
+  /** 0-100 max chance of precipitation that day */
+  precipChance: number
+  weatherCode: number
+  /** Human-readable label for weatherCode */
+  label: string
+}
+
 export interface WeatherInfo {
   /** Short human-readable description, e.g. "Partly cloudy, 22 °C" */
   summary: string
@@ -20,6 +32,8 @@ export interface WeatherInfo {
   weatherCode: number
   /** City name if available from reverse-geocoding */
   city: string | null
+  /** 3-day daily forecast starting today; empty if Open-Meteo didn't return it */
+  forecast: WeatherForecastDay[]
 }
 
 // Module-level cache so multiple composable calls share the same request.
@@ -58,7 +72,8 @@ async function fetchWeather(): Promise<WeatherInfo | null> {
     `https://api.open-meteo.com/v1/forecast` +
     `?latitude=${pos.lat}&longitude=${pos.lon}` +
     `&current=temperature_2m,weather_code,precipitation_probability` +
-    `&forecast_days=1&timezone=auto`
+    `&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code` +
+    `&forecast_days=3&timezone=auto`
 
   try {
     const res = await fetch(url)
@@ -68,6 +83,20 @@ async function fetchWeather(): Promise<WeatherInfo | null> {
     const tempC = Math.round(cur.temperature_2m ?? 0)
     const weatherCode = cur.weather_code ?? 0
     const precipChance = cur.precipitation_probability ?? 0
+
+    const daily = data.daily ?? {}
+    const dates: string[] = daily.time ?? []
+    const forecast: WeatherForecastDay[] = dates.map((d: string, i: number) => {
+      const code = daily.weather_code?.[i] ?? 0
+      return {
+        date: d,
+        tempMaxC: Math.round(daily.temperature_2m_max?.[i] ?? 0),
+        tempMinC: Math.round(daily.temperature_2m_min?.[i] ?? 0),
+        precipChance: daily.precipitation_probability_max?.[i] ?? 0,
+        weatherCode: code,
+        label: wmoLabel(code),
+      }
+    })
 
     // Best-effort city lookup (nominatim, no key).
     let city: string | null = null
@@ -93,7 +122,7 @@ async function fetchWeather(): Promise<WeatherInfo | null> {
       ? `${label}, ${tempC}°C in ${city}`
       : `${label}, ${tempC}°C`
 
-    return { summary, precipChance, tempC, weatherCode, city }
+    return { summary, precipChance, tempC, weatherCode, city, forecast }
   } catch {
     return null
   }

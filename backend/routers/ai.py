@@ -74,6 +74,10 @@ class ChatTurn(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     history: list[ChatTurn] = Field(default_factory=list)
+    # Optional client-supplied weather snapshot (current + 3-day forecast from
+    # Open-Meteo via the frontend `useWeather` composable). Free-form dict so
+    # we don't have to re-validate the Open-Meteo schema on the server.
+    weather: dict | None = None
 
 
 class ChatResponse(BaseModel):
@@ -255,6 +259,7 @@ async def chat(
         history=[h.model_dump() for h in body.history],
         todos=todos,
         folders=folders,
+        weather=body.weather,
     )
 
     if not reply:

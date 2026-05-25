@@ -353,10 +353,33 @@
                       >
                         #{{ t }}
                       </span>
+                      <!-- Presence indicators (click to expand) -->
+                      <button
+                        v-if="todo.description"
+                        type="button"
+                        class="inline-flex items-center gap-0.5 text-xs text-secondary-500 dark:text-secondary-400 hover:text-primary-600 dark:hover:text-primary-400"
+                        :title="isExpanded(todo.id) ? 'Hide notes' : 'Show notes'"
+                        @click="toggleExpanded(todo)"
+                      >📝</button>
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-0.5 text-xs text-secondary-500 dark:text-secondary-400 hover:text-primary-600 dark:hover:text-primary-400"
+                        :title="isExpanded(todo.id) ? 'Hide comments' : 'Show comments'"
+                        @click="toggleExpanded(todo)"
+                      >💬</button>
                     </div>
                   </div>
 
                   <div class="flex-shrink-0 flex items-center gap-1">
+                    <button
+                      type="button"
+                      class="p-1.5 rounded-md text-secondary-400 hover:text-primary-600 hover:bg-secondary-100 dark:hover:text-primary-400 dark:hover:bg-secondary-700 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      :aria-label="isExpanded(todo.id) ? 'Collapse details' : 'Expand details'"
+                      :aria-expanded="isExpanded(todo.id)"
+                      @click="toggleExpanded(todo)"
+                    >
+                      <svg class="w-4 h-4 transition-transform duration-200" :class="{ 'rotate-180': isExpanded(todo.id) }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                    </button>
                     <button
                       type="button"
                       class="p-1.5 rounded-md text-secondary-400 hover:text-primary-600 hover:bg-secondary-100 dark:hover:text-primary-400 dark:hover:bg-secondary-700 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -374,6 +397,65 @@
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                   </div>
+                </div>
+
+                <!-- Expanded panel: inline editable notes + subtask adder + comments -->
+                <div v-if="isExpanded(todo.id)" class="mt-4 pt-4 border-t border-secondary-200 dark:border-secondary-700 space-y-4">
+                  <div>
+                    <label class="block text-xs font-semibold text-secondary-700 dark:text-secondary-300 mb-1">📝 Notes</label>
+                    <textarea
+                      v-model="noteDraft[todo.id]"
+                      rows="2"
+                      class="w-full text-sm rounded-md border border-secondary-300 dark:border-secondary-700 bg-white dark:bg-secondary-800 p-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:text-white"
+                      placeholder="Add notes…"
+                      maxlength="2000"
+                      @blur="saveNote(todo)"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-semibold text-secondary-700 dark:text-secondary-300 mb-1">☑️ Add a subtask</label>
+                    <div class="flex items-center gap-2">
+                      <input
+                        v-model="newSubtaskDraft[todo.id]"
+                        type="text"
+                        class="flex-1 text-sm rounded-md border border-secondary-300 dark:border-secondary-700 bg-white dark:bg-secondary-800 px-2 py-1 dark:text-white"
+                        placeholder="Type and press Enter…"
+                        maxlength="200"
+                        @keydown.enter.prevent="addInlineSubtask(todo)"
+                      />
+                      <button
+                        type="button"
+                        class="text-xs px-2 py-1 rounded bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
+                        :disabled="!(newSubtaskDraft[todo.id] || '').trim()"
+                        @click="addInlineSubtask(todo)"
+                      >Add</button>
+                    </div>
+                    <ul v-if="todo.subtasks?.length" class="mt-2 space-y-1">
+                      <li
+                        v-for="s in todo.subtasks"
+                        :key="s.id"
+                        class="group/sub flex items-center gap-2 text-xs"
+                      >
+                        <input
+                          type="checkbox"
+                          :checked="s.done"
+                          class="rounded text-primary-600 focus:ring-primary-500"
+                          @change="toggleSubtask(todo, s.id)"
+                        />
+                        <span
+                          class="flex-1"
+                          :class="s.done ? 'line-through text-secondary-400' : 'text-secondary-700 dark:text-secondary-300'"
+                        >{{ s.title }}</span>
+                        <button
+                          type="button"
+                          class="opacity-0 group-hover/sub:opacity-100 text-xs text-red-600 hover:underline"
+                          :aria-label="`Remove ${s.title}`"
+                          @click="removeInlineSubtask(todo, s.id)"
+                        >×</button>
+                      </li>
+                    </ul>
+                  </div>
+                  <CommentsSection :key="todo.id" :todo-id="todo.id" />
                 </div>
               </li>
             </ul>
@@ -843,6 +925,45 @@ async function toggleSubtask(todo: Todo, subtaskId: string) {
   const next = todo.subtasks.map((s) => (s.id === subtaskId ? { ...s, done: !s.done } : s))
   const result = await updateTodo(todo.id, { subtasks: next as any })
   if (!result) toastError(todosError.value || 'Failed to update subtask')
+}
+
+// --- Inline expanded panel (notes / subtasks / comments) -----
+const expandedTodoIds = reactive(new Set<string>())
+const newSubtaskDraft = reactive<Record<string, string>>({})
+const noteDraft = reactive<Record<string, string>>({})
+
+function isExpanded(id: string): boolean {
+  return expandedTodoIds.has(id)
+}
+function toggleExpanded(todo: Todo) {
+  if (expandedTodoIds.has(todo.id)) {
+    expandedTodoIds.delete(todo.id)
+  } else {
+    expandedTodoIds.add(todo.id)
+    if (noteDraft[todo.id] === undefined) noteDraft[todo.id] = todo.description || ''
+  }
+}
+async function saveNote(todo: Todo) {
+  const next = (noteDraft[todo.id] ?? '').trim()
+  if (next === (todo.description || '').trim()) return
+  const result = await updateTodo(todo.id, { description: next || null } as any)
+  if (!result) toastError(todosError.value || 'Failed to save note')
+}
+async function addInlineSubtask(todo: Todo) {
+  const title = (newSubtaskDraft[todo.id] || '').trim()
+  if (!title) return
+  const next = [
+    ...(todo.subtasks || []),
+    { id: `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`, title, done: false },
+  ]
+  const result = await updateTodo(todo.id, { subtasks: next as any })
+  if (result) newSubtaskDraft[todo.id] = ''
+  else toastError(todosError.value || 'Failed to add subtask')
+}
+async function removeInlineSubtask(todo: Todo, subtaskId: string) {
+  const next = (todo.subtasks || []).filter((s) => s.id !== subtaskId)
+  const result = await updateTodo(todo.id, { subtasks: next as any })
+  if (!result) toastError(todosError.value || 'Failed to remove subtask')
 }
 
 function confirmDelete(todo: Todo) {

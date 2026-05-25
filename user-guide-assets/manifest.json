@@ -1,0 +1,52 @@
+[
+  {
+    "route": "/login",
+    "label": "Sign In",
+    "screenshots": [
+      "/Users/rovs/todo-app/user-guide-assets/screenshots/page-login.png"
+    ],
+    "steps": [
+      "Open the app at http://localhost:3000/login.",
+      "In Email or Username, enter your registered email or username.",
+      "In Password, enter your account password.",
+      "Click Sign in to authenticate.",
+      "On success you are redirected to the dashboard. If you don't have an account yet, click Create one."
+    ]
+  },
+  {
+    "route": "/register",
+    "label": "Create Account",
+    "screenshots": [
+      "/Users/rovs/todo-app/user-guide-assets/screenshots/page-register.png"
+    ],
+    "steps": [
+      "From the login page, click Create one — or open /register directly.",
+      "Enter a valid Email address.",
+      "Choose a Username.",
+      "Enter a Password (at least 8 characters) and confirm it in Confirm Password.",
+      "Click Create account. On success you are signed in and redirected to the dashboard."
+    ]
+  },
+  {
+    "route": "/dashboard",
+    "label": "Todo Dashboard",
+    "screenshots": [
+      "/Users/rovs/todo-app/user-guide-assets/screenshots/page-dashboard-empty.png",
+      "/Users/rovs/todo-app/user-guide-assets/screenshots/page-dashboard-modal-create-todo.png",
+      "/Users/rovs/todo-app/user-guide-assets/screenshots/page-dashboard-modal-create-todo-filled.png",
+      "/Users/rovs/todo-app/user-guide-assets/screenshots/page-dashboard.png",
+      "/Users/rovs/todo-app/user-guide-assets/screenshots/page-dashboard-filters-applied.png",
+      "/Users/rovs/todo-app/user-guide-assets/screenshots/page-dashboard-dialog-delete-confirm.png",
+      "/Users/rovs/todo-app/user-guide-assets/screenshots/page-dashboard-dark-mode.png"
+    ],
+    "steps": [
+      "When the dashboard opens with no todos, you see an empty state inviting you to create one. Click Create Todo or the floating + button in the bottom right.",
+      "Fill the Create New Todo modal: enter a Title (required), an optional Description, choose a Priority (Low, Medium, or High), and optionally pick a Due Date. Click Create Todo to save, or Cancel to dismiss.",
+      "Once saved, the todo appears in the list with priority and status badges. Use the round checkbox at the left of a todo to toggle it between Pending and Done.",
+      "Use the filter bar above the list to narrow results by Status or Priority, and to sort by Due Date or Created At.",
+      "To remove a todo, click the trash icon on its row. A confirmation dialog asks you to confirm; click Delete to remove it permanently or Cancel to keep it.",
+      "Use the moon / sun icon in the header to switch between light and dark mode. Your preference is remembered across sessions.",
+      "Click Logout in the header to sign out and return to the login page."
+    ]
+  }
+]
